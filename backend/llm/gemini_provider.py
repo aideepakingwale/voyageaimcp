@@ -7,17 +7,13 @@ Signup: aistudio.google.com (Google account, no credit card)
 """
 from .base_provider import BaseProvider, LLMResponse
 
-# Try new SDK first, fall back to legacy
+# Use new google-genai SDK only (google-generativeai is deprecated)
 try:
     from google import genai as _genai
     from google.genai import types as _types
     _SDK = "new"
 except ImportError:
-    try:
-        import google.generativeai as _genai_legacy  # noqa: F401
-        _SDK = "legacy"
-    except ImportError:
-        _SDK = None
+    _SDK = None   # install: pip install google-genai
 
 
 class GeminiProvider(BaseProvider):

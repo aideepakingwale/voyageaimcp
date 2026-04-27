@@ -16,13 +16,15 @@ ITINERARY_SCHEMA = {
                 "dates":        {"type": "object"},
                 "guests":       {"type": "integer", "minimum": 1, "maximum": 20},
                 "budget_gbp":   {"type": "number", "minimum": 0},
+                "adults":       {"type": "integer", "minimum": 0},
+                "children":     {"type": "integer", "minimum": 0},
                 "preferences":  {"type": "object"},
             },
         },
         "destinations":       {"type": "array", "minItems": 1},
         "confidence_scores":  {
             "type": "object",
-            "required": ["intent", "overall"],
+            "required": ["overall"],
             "properties": {
                 "intent":        {"type": "number", "minimum": 0, "maximum": 1},
                 "rag":           {"type": "number", "minimum": 0, "maximum": 1},

@@ -22,8 +22,8 @@ class BusinessRulesGuardrail:
         budget = intent.get("budget_gbp", float("inf"))
         guests = intent.get("guests", 1)
 
-        # Rule 1: Budget cap
-        if total > budget * (1 + Config.MAX_BUDGET_OVERSHOOT):
+        # Rule 1: Budget cap (only check if budget was explicitly stated)
+        if total > 0 and budget < 99000 and total > budget * (1 + Config.MAX_BUDGET_OVERSHOOT):
             violations.append(
                 f"Total cost £{total:.0f} exceeds budget £{budget:.0f} "
                 f"by more than {Config.MAX_BUDGET_OVERSHOOT:.0%}"

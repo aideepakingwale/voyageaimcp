@@ -74,7 +74,7 @@ class ConfidenceScorer:
             "gds":           round(s3, 3),
             "hallucination": round(s4, 3),
             "overall":       final,
-            "threshold":     Config.CONFIDENCE_THRESHOLD,
+            "threshold":     Config.CONFIDENCE_THRESHOLD,  # 0.72
             "passed":        passed,
             "weakest":       self._weakest(s1, s2, s3, s4),
         }

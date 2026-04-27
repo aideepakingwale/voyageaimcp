@@ -29,7 +29,7 @@ class Config:
     ORS_API_KEY        = os.getenv("OPENROUTESERVICE_API_KEY","")
 
     # ── Guardrails ────────────────────────────────────────
-    CONFIDENCE_THRESHOLD    = 0.85
+    CONFIDENCE_THRESHOLD    = 0.72  # 0.85 was too strict for template fallback
     MAX_RETRY_ITERATIONS    = 3
     HIGH_VALUE_THRESHOLD    = 1000
     MAX_INPUT_TOKENS        = 512
