@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoyageAI — Travel Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/chat.css">
+  <link rel="stylesheet" href="css/panels.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════ SIDEBAR ═══════════════════════════ -->
+<aside class="sidebar">
+
+  <div class="sb-logo">
+    <div class="logo-row">
+      <div class="logo-icon">✈</div>
+      <div>
+        <div class="logo-text">VoyageAI</div>
+        <div class="logo-sub">Personalised Travel</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logged-in user card -->
+  <div class="sb-section">
+    <div class="user-card" id="userCard">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div class="user-info">
+        <div class="user-name"  id="userName">—</div>
+        <div class="user-email" id="userEmail">—</div>
+        <div class="tier-badge" id="userTier">—</div>
+      </div>
+    </div>
+    <div class="pts-row" style="margin-top:10px">
+      <span style="color:var(--muted)">Points balance</span>
+      <span class="pts-val" id="ccPts">—</span>
+    </div>
+    <div class="pts-row">
+      <span style="color:var(--muted)">Member ID</span>
+      <span style="font-size:11px;color:var(--muted);font-family:var(--mono)" id="ccMemberId">—</span>
+    </div>
+    <div class="pts-row">
+      <span style="color:var(--muted)">Member since</span>
+      <span style="font-size:12px;color:var(--muted)" id="ccSince">—</span>
+    </div>
+
+    <!-- Cliff-edge widget -->
+    <div class="cliff-widget" id="cliffWidget" style="display:none">
+      <div class="cliff-title" id="cliffTitle">🎯 Almost there!</div>
+      <div class="cliff-bar-wrap">
+        <div class="cliff-bar-label"><span>Points</span><span id="cliffPtsPct">0%</span></div>
+        <div class="cliff-bar-bg"><div class="cliff-bar-fill" id="cliffPtsBar" style="width:0%"></div></div>
+      </div>
+      <div class="cliff-bar-wrap">
+        <div class="cliff-bar-label"><span>Nights</span><span id="cliffNightsPct">0%</span></div>
+        <div class="cliff-bar-bg"><div class="cliff-bar-fill" id="cliffNightsBar" style="width:0%"></div></div>
+      </div>
+      <div class="cliff-msg" id="cliffMsg"></div>
+    </div>
+
+    <!-- Sign out -->
+    <button class="btn-signout" id="signoutBtn">↩ Sign out</button>
+  </div>
+
+  <!-- AI Recommendations -->
+  <div class="sb-section" id="recSection" style="display:none">
+    <div class="sb-title">💡 AI Recommendations</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px" id="interestLine">Based on your travel history</div>
+    <div class="interest-tags" id="interestTags"></div>
+    <div id="recCards"></div>
+  </div>
+
+  <!-- MCP Servers -->
+  <div class="sb-section">
+    <div class="sb-title">🔌 MCP Servers</div>
+    <div class="mcp-grid">
+      <div class="mcp-chip" data-m="flights">   <div class="mcdot"></div>✈ Flights    </div>
+      <div class="mcp-chip" data-m="hotels">    <div class="mcdot"></div>🏨 Hotels     </div>
+      <div class="mcp-chip" data-m="cars">      <div class="mcdot"></div>🚗 Cars       </div>
+      <div class="mcp-chip" data-m="weather">   <div class="mcdot"></div>🌤 Weather    </div>
+      <div class="mcp-chip" data-m="currency">  <div class="mcdot"></div>💱 FX Rates   </div>
+      <div class="mcp-chip" data-m="visa">      <div class="mcdot"></div>📋 Visa       </div>
+      <div class="mcp-chip" data-m="customer">  <div class="mcdot"></div>👤 Profile    </div>
+      <div class="mcp-chip" data-m="loyalty">   <div class="mcdot"></div>⭐ Loyalty    </div>
+      <div class="mcp-chip" data-m="ancillaries"><div class="mcdot"></div>🎁 Extras    </div>
+      <div class="mcp-chip" data-m="experiences"><div class="mcdot"></div>🎭 Exp       </div>
+    </div>
+  </div>
+
+  <!-- LLM Waterfall -->
+  <div class="sb-section" style="padding-bottom:16px">
+    <div class="sb-title">⚡ LLM Waterfall</div>
+    <div class="wf-chips">
+      <span class="pc idle" data-p="groq">⚡ Groq</span>
+      <span style="color:var(--dim);font-size:11px;align-self:center">→</span>
+      <span class="pc idle" data-p="gemini">🔷 Gemini</span>
+      <span style="color:var(--dim);font-size:11px;align-self:center">→</span>
+      <span class="pc idle" data-p="anthropic">🟣 Claude</span>
+      <span style="color:var(--dim);font-size:11px;align-self:center">→</span>
+      <span class="pc idle" data-p="template">🔧 Template</span>
+    </div>
+    <div style="font-size:10px;color:var(--dim);margin-top:8px">Zero-cost · Free providers first</div>
+  </div>
+
+</aside>
+
+
+<!-- ═══════════════════════════ MAIN HEADER ═══════════════════════════ -->
+<header class="main-header">
+  <div class="header-left">
+    <div>
+      <div class="page-title" id="pageTitle">Travel Assistant</div>
+      <div class="page-sub"   id="headerSub">Loading your profile…</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="gds-timer" id="gdsTimer" style="display:none">
+      <span>GDS</span>
+      <div class="gds-bar"><div class="gds-fill" id="gdsFill" style="width:100%"></div></div>
+      <span id="gdsLabel" style="min-width:34px">10:00</span>
+    </div>
+    <div class="status-pill">
+      <div class="sdot"></div>
+      <span id="statusText">Ready</span>
+    </div>
+  </div>
+</header>
+
+
+<!-- ═══════════════════════════ MAIN CONTENT ═══════════════════════════ -->
+<main class="main-content">
+  <div class="chat-win" id="cwin"></div>
+
+  <div class="input-bar">
+    <div class="suggs" id="suggs">
+      <div class="sugg" data-msg="Plan a family holiday to Lisbon in October, 4 people, pool hotel, £3,000">✈ Lisbon family, Oct, £3k</div>
+      <div class="sugg" data-msg="Weekend break in Barcelona for 2, June, budget £1,500">🏖 Barcelona weekend</div>
+      <div class="sugg" data-msg="Paris city break 3 nights September">🗼 Paris city break</div>
+      <div class="sugg" data-msg="Ski holiday in the Alps, January, couple, £2,000">❄️ Ski Alps, January</div>
+      <div class="sugg" data-msg="Maldives luxury honeymoon 2 weeks, overwater villa">🏝️ Maldives honeymoon</div>
+    </div>
+    <div class="input-row">
+      <div class="input-wrap">
+        <textarea id="messageInput"
+          placeholder="Where would you like to go?"
+          rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" aria-label="Send">
+          <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

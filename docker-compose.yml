@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY:-demo}
+      - EXCHANGERATE_API_KEY=${EXCHANGERATE_API_KEY:-demo}
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-demo}
+      - AMADEUS_CLIENT_ID=${AMADEUS_CLIENT_ID:-demo}
+      - AMADEUS_CLIENT_SECRET=${AMADEUS_CLIENT_SECRET:-demo}
+    volumes:
+      - ./backend:/app
+    command: gunicorn -w 4 -b 0.0.0.0:5000 app:app --timeout 60
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend

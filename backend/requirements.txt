@@ -1,0 +1,23 @@
+# ════════════════════════════════════════════════
+# VoyageAI Backend Dependencies
+# ════════════════════════════════════════════════
+
+# Web framework
+flask==3.0.0
+flask-cors==4.0.0
+gunicorn==21.2.0           # production server
+
+# ── LLM Providers (zero-cost waterfall) ──
+groq==0.9.0                # FREE: console.groq.com
+google-genai>=0.3.0        # FREE: aistudio.google.com  (new SDK)
+anthropic==0.25.0          # PAID fallback (optional)
+
+# ── HTTP & validation ──
+requests==2.31.0
+jsonschema==4.21.1
+python-dotenv==1.0.0
+pydantic==2.6.0
+
+# ── Utilities ──
+cachetools==5.3.3
+tenacity==8.2.3

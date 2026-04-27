@@ -1,0 +1,37 @@
+/* ═══════════════════════════════════════
+   VoyageAI Design System — CSS Variables
+   Edit this file to retheme the entire app
+   ═══════════════════════════════════════ */
+
+:root {
+  /* ── Backgrounds ── */
+  --bg:     #040C18;
+  --bg2:    #071830;
+  --bg3:    #0A1E30;
+  --bg4:    #0D2438;
+  --border: #0D2840;
+
+  /* ── Brand colours ── */
+  --teal:   #00C9A7;
+  --blue:   #3BAADB;
+  --purple: #9B59B6;
+  --amber:  #F39C12;
+  --gold:   #F1C40F;
+  --red:    #E74C3C;
+  --green:  #27AE60;
+  --pink:   #E91E8C;
+
+  /* ── Text ── */
+  --text:   #E8F4FD;
+  --muted:  #7FB3D3;
+  --dim:    #3D5A6B;
+
+  /* ── Typography ── */
+  --font:   'Space Grotesk', sans-serif;
+  --mono:   'JetBrains Mono', monospace;
+
+  /* ── Spacing & shape ── */
+  --radius:    14px;
+  --radius-sm:  9px;
+  --radius-xs:  6px;
+}

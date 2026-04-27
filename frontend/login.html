@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoyageAI — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#040C18;--bg2:#071830;--bg3:#0A1E30;--border:#0D2840;
+      --teal:#00C9A7;--blue:#3BAADB;--amber:#F39C12;--gold:#F1C40F;
+      --red:#E74C3C;--green:#27AE60;--purple:#9B59B6;
+      --text:#E8F4FD;--muted:#7FB3D3;--dim:#3D5A6B;
+      --font:'Space Grotesk',sans-serif;--mono:'JetBrains Mono',monospace;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:var(--font);
+         min-height:100vh;display:flex;flex-direction:column;align-items:center;
+         justify-content:center;padding:20px;
+         background-image:
+           radial-gradient(ellipse at 20% 20%, rgba(0,201,167,.06) 0%, transparent 60%),
+           radial-gradient(ellipse at 80% 80%, rgba(59,170,219,.06) 0%, transparent 60%)}
+
+    /* ── CARD ── */
+    .login-card{
+      width:100%;max-width:440px;
+      background:var(--bg2);
+      border:1px solid var(--border);
+      border-radius:20px;
+      overflow:hidden;
+      box-shadow:0 24px 64px rgba(0,0,0,.5);
+    }
+
+    /* ── HEADER ── */
+    .card-header{
+      background:linear-gradient(135deg,#071830,#0A2540);
+      padding:32px 32px 24px;
+      border-bottom:1px solid var(--border);
+      text-align:center;
+    }
+    .logo-ring{
+      width:64px;height:64px;
+      background:linear-gradient(135deg,var(--teal),var(--blue));
+      border-radius:18px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:30px;margin:0 auto 16px;
+      box-shadow:0 8px 24px rgba(0,201,167,.3);
+    }
+    .card-title{font-size:22px;font-weight:700;margin-bottom:4px}
+    .card-sub{font-size:13px;color:var(--muted)}
+
+    /* ── FORM ── */
+    .card-body{padding:28px 32px}
+    .field{margin-bottom:18px}
+    .field label{
+      display:block;font-size:12px;font-weight:600;
+      color:var(--muted);letter-spacing:1px;text-transform:uppercase;
+      margin-bottom:7px;
+    }
+    .field input{
+      width:100%;background:var(--bg3);
+      border:1px solid var(--border);
+      border-radius:10px;padding:12px 14px;
+      color:var(--text);font-family:var(--font);font-size:14px;
+      outline:none;transition:border-color .2s;
+    }
+    .field input:focus{border-color:var(--teal)}
+    .field input::placeholder{color:var(--dim)}
+
+    .field .input-hint{
+      font-size:11px;color:var(--dim);margin-top:5px;font-family:var(--mono);
+    }
+
+    /* ── ERROR ── */
+    .error-box{
+      background:rgba(231,76,60,.12);border:1px solid rgba(231,76,60,.35);
+      border-radius:10px;padding:11px 14px;
+      font-size:13px;color:#FF8080;margin-bottom:18px;
+      display:none;align-items:center;gap:8px;
+    }
+    .error-box.visible{display:flex}
+
+    /* ── BUTTON ── */
+    .btn-login{
+      width:100%;padding:13px;border-radius:10px;
+      background:linear-gradient(135deg,var(--teal),#00A88A);
+      border:none;color:#040C18;font-family:var(--font);
+      font-size:14px;font-weight:700;cursor:pointer;
+      transition:all .2s;letter-spacing:.3px;
+    }
+    .btn-login:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,201,167,.35)}
+    .btn-login:disabled{background:var(--dim);cursor:not-allowed;transform:none;box-shadow:none}
+    .btn-login .spinner{display:none}
+    .btn-login.loading .spinner{display:inline}
+    .btn-login.loading .label{display:none}
+
+    /* ── DEMO ACCOUNTS ── */
+    .demo-section{
+      border-top:1px solid var(--border);
+      padding:20px 32px 24px;
+      background:rgba(0,0,0,.15);
+    }
+    .demo-title{
+      font-size:11px;font-weight:700;letter-spacing:2px;
+      color:var(--dim);text-transform:uppercase;margin-bottom:12px;
+      display:flex;align-items:center;gap:8px;
+    }
+    .demo-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    .demo-grid{display:flex;flex-direction:column;gap:6px}
+    .demo-row{
+      display:flex;align-items:center;gap:10px;
+      background:var(--bg3);border:1px solid var(--border);
+      border-radius:10px;padding:9px 12px;cursor:pointer;
+      transition:all .2s;
+    }
+    .demo-row:hover{border-color:var(--teal);background:rgba(0,201,167,.05)}
+    .demo-avatar{
+      width:32px;height:32px;border-radius:8px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:15px;flex-shrink:0;
+    }
+    .demo-info{flex:1;min-width:0}
+    .demo-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .demo-email{font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .demo-tier{
+      font-size:10px;font-weight:700;padding:3px 8px;
+      border-radius:10px;flex-shrink:0;
+    }
+    .t-Blue    {background:rgba(59,170,219,.15);color:var(--blue);border:1px solid rgba(59,170,219,.3)}
+    .t-Silver  {background:rgba(192,192,192,.15);color:#C0C0C0;border:1px solid rgba(192,192,192,.3)}
+    .t-Gold    {background:rgba(241,196,15,.15);color:var(--gold);border:1px solid rgba(241,196,15,.3)}
+    .t-Platinum{background:rgba(155,89,182,.15);color:var(--purple);border:1px solid rgba(155,89,182,.3)}
+
+    .click-hint{font-size:11px;color:var(--dim);text-align:center;margin-top:10px}
+  </style>
+</head>
+<body>
+
+<div class="login-card">
+
+  <!-- Header -->
+  <div class="card-header">
+    <div class="logo-ring">✈</div>
+    <div class="card-title">Welcome to VoyageAI</div>
+    <div class="card-sub">Sign in to access your personalised travel assistant</div>
+  </div>
+
+  <!-- Form -->
+  <div class="card-body">
+    <div class="error-box" id="errorBox">
+      <span>⚠️</span>
+      <span id="errorMsg">Invalid credentials. Please try again.</span>
+    </div>
+
+    <div class="field">
+      <label>Email Address</label>
+      <input type="email" id="emailInput"
+             placeholder="your.email@example.com"
+             autocomplete="email" autofocus>
+    </div>
+
+    <div class="field">
+      <label>Member ID</label>
+      <input type="text" id="memberInput"
+             placeholder="VGI-XXXX-0000"
+             autocomplete="off"
+             style="font-family:var(--mono);letter-spacing:.5px">
+      <div class="input-hint">Found on your membership card or welcome email</div>
+    </div>
+
+    <button class="btn-login" id="loginBtn" onclick="doLogin()">
+      <span class="label">Sign In →</span>
+      <span class="spinner">Signing in…</span>
+    </button>
+  </div>
+
+  <!-- Demo accounts -->
+  <div class="demo-section">
+    <div class="demo-title">Demo Accounts</div>
+    <div class="demo-grid" id="demoGrid">
+      <div style="text-align:center;color:var(--dim);font-size:12px;padding:8px">Loading…</div>
+    </div>
+    <div class="click-hint">↑ Click any account to auto-fill credentials</div>
+  </div>
+
+</div>
+
+<script>
+  const API = window.VOYAGE_API || 'http://localhost:5000/api';
+
+  const TIER_ICON = { Blue:'🔵', Silver:'🥈', Gold:'🥇', Platinum:'💎' };
+  const STYLE_ICON = { family:'👨‍👩‍👧‍👦', business:'💼', leisure:'🌍', adventure:'🏄' };
+
+  // ── Load demo credentials ──────────────────────────────────
+  (async () => {
+    try {
+      const r = await fetch(`${API}/auth/demo-credentials`);
+      const { credentials = [] } = await r.json();
+      const grid = document.getElementById('demoGrid');
+      grid.innerHTML = credentials.map(c => `
+        <div class="demo-row" onclick="fillCredentials('${c.email}','${c.member_id}')">
+          <div class="demo-avatar">${STYLE_ICON[c.travel_style] || '🌍'}</div>
+          <div class="demo-info">
+            <div class="demo-name">${c.name}</div>
+            <div class="demo-email">${c.email}</div>
+          </div>
+          <div class="demo-tier t-${c.tier}">
+            ${TIER_ICON[c.tier] || ''} ${c.tier}
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      document.getElementById('demoGrid').innerHTML =
+        '<div style="color:var(--red);font-size:12px;padding:8px">⚠ Server not reachable — make sure python run.py is running</div>';
+    }
+  })();
+
+  // ── Fill from demo row ─────────────────────────────────────
+  function fillCredentials(email, memberId) {
+    document.getElementById('emailInput').value  = email;
+    document.getElementById('memberInput').value = memberId;
+    document.getElementById('errorBox').classList.remove('visible');
+    document.getElementById('loginBtn').focus();
+  }
+
+  // ── Login ──────────────────────────────────────────────────
+  async function doLogin() {
+    const email    = document.getElementById('emailInput').value.trim();
+    const memberId = document.getElementById('memberInput').value.trim();
+    const btn      = document.getElementById('loginBtn');
+    const errBox   = document.getElementById('errorBox');
+
+    if (!email || !memberId) {
+      showError('Please enter your email address and Member ID.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+    errBox.classList.remove('visible');
+
+    try {
+      const r = await fetch(`${API}/auth/login`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email, member_id: memberId }),
+      });
+      const data = await r.json();
+
+      if (!r.ok) {
+        showError(data.error || 'Login failed. Please check your credentials.');
+        return;
+      }
+
+      // Store auth in sessionStorage (cleared when browser tab closes)
+      sessionStorage.setItem('voyage_auth', JSON.stringify(data));
+
+      // Navigate to main app
+      window.location.href = 'index.html';
+
+    } catch (e) {
+      showError('Cannot connect to server. Make sure python run.py is running.');
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+    }
+  }
+
+  function showError(msg) {
+    document.getElementById('errorMsg').textContent = msg;
+    document.getElementById('errorBox').classList.add('visible');
+  }
+
+  // ── Enter key ──────────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  // ── Redirect if already logged in ─────────────────────────
+  const existing = sessionStorage.getItem('voyage_auth');
+  if (existing) {
+    try {
+      const auth = JSON.parse(existing);
+      if (auth?.token) window.location.href = 'index.html';
+    } catch { sessionStorage.removeItem('voyage_auth'); }
+  }
+</script>
+</body>
+</html>
