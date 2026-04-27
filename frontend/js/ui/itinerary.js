@@ -67,22 +67,30 @@ export async function renderItineraryCard(out, conf, actionCheck, meta, rawData 
       loyaltyHTML       = buildLoyaltyPanel(loyRes.data);
       ancillaryHTML     = buildAncillariesPanel(ancRes.data);
       personalisedHTML  = buildPersonalisedPanel(customer);
-      visaHTML          = buildVisaPanel(
-        mcp_data?.visa?.data || out.recommendations?.visa_full || null,
-        customer?.profile?.name?.split(' ')[0] ? 'your' : 'Your',
-        intent.destination || 'the destination'
-      );
+      // visaHTML built below (outside customer block)
     } catch (e) {
       console.warn('Loyalty/ancillary fetch error:', e.message);
       personalisedHTML = buildPersonalisedPanel(customer);
+      // visaHTML will be built from mcp_data below regardless
     }
   }
+
+  // Build visa panel from MCP data (always, even without login)
+  const visaSource  = mcp_data?.visa?.data ?? null;
+  const visaPassport = customer?.profile?.name
+    ? `${customer.profile.name.split(' ')[0]}'s passport`
+    : 'Your passport';
+  visaHTML = buildVisaPanel(
+    visaSource,
+    visaPassport,
+    intent.destination || 'your destination'
+  );
 
   const html = _buildCard({
     out, conf, actionCheck, meta,
     intent, recs, dates, flight, hotel, transf, exps,
     total, budget,
-    loyaltyHTML, ancillaryHTML, personalisedHTML,
+    loyaltyHTML, ancillaryHTML, personalisedHTML, visaHTML,
     hasCustomer: !!cid,
   });
 

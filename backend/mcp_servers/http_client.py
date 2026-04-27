@@ -1,30 +1,30 @@
 """
 Shared HTTP client for all MCP server API calls.
-Handles: retries, timeouts, connection errors, rate limits.
+NOTE: We do NOT retry 5xx errors — Amadeus sandbox returns 500s that
+are not transient. Retrying them just causes a flood of errors.
+Only 429 (rate limit) triggers a brief backoff.
 """
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-
-def build_session(retries: int = 2, backoff: float = 0.3,
-                  timeout: int = 8) -> requests.Session:
-    """Build a requests.Session with retry logic and sensible timeouts."""
+# Standard session — no 5xx retry (would flood Amadeus sandbox)
+def build_session(timeout: int = 8) -> requests.Session:
     session = requests.Session()
-    retry   = Retry(
-        total=retries,
-        backoff_factor=backoff,
-        status_forcelist=[429, 500, 502, 503, 504],
+    # Only retry on connection errors and 429 rate limits
+    retry = Retry(
+        total=1,
+        backoff_factor=0.5,
+        status_forcelist=[429],        # only rate-limit triggers retry
         allowed_methods=["GET", "POST"],
+        raise_on_status=False,
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
     session.mount("http://",  adapter)
-    session._default_timeout = timeout
     return session
 
 
-# Module-level shared session (connection-pool reuse)
 HTTP = build_session()
 
 

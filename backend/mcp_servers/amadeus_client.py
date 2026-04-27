@@ -10,6 +10,8 @@ import os
 import time
 import logging
 from .http_client import post, get
+import logging
+log = logging.getLogger(__name__)
 
 log = logging.getLogger(__name__)
 
@@ -84,9 +86,12 @@ class AmadeusClient:
             )
             if r.ok:
                 return r.json().get("data", [])
-            log.warning("Amadeus flight search %s: %s", r.status_code, r.text[:300])
+            if r.status_code == 500:
+                log.debug("Amadeus sandbox 500 on flights — using fallback")
+            else:
+                log.warning("Amadeus flight search %s: %s", r.status_code, r.text[:200])
         except Exception as e:
-            log.warning("Amadeus flight error: %s", e)
+            log.debug("Amadeus flight error (fallback will be used): %s", type(e).__name__)
         return []
 
     def hotel_list(self, city_code: str, radius: int = 5,
@@ -107,7 +112,10 @@ class AmadeusClient:
                     params=params, headers=headers, timeout=10)
             if r.ok:
                 return r.json().get("data", [])
-            log.warning("Amadeus hotel list %s: %s", r.status_code, r.text[:300])
+            if r.status_code == 500:
+                log.debug("Amadeus sandbox 500 on hotels — using fallback")
+            else:
+                log.warning("Amadeus hotel list %s: %s", r.status_code, r.text[:200])
         except Exception as e:
             log.warning("Amadeus hotel list error: %s", e)
         return []
@@ -135,7 +143,10 @@ class AmadeusClient:
             )
             if r.ok:
                 return r.json().get("data", [])
-            log.warning("Amadeus hotel offers %s: %s", r.status_code, r.text[:300])
+            if r.status_code == 500:
+                log.debug("Amadeus sandbox 500 on hotel offers — using fallback")
+            else:
+                log.warning("Amadeus hotel offers %s: %s", r.status_code, r.text[:200])
         except Exception as e:
             log.warning("Amadeus hotel offers error: %s", e)
         return []
@@ -155,7 +166,10 @@ class AmadeusClient:
             )
             if r.ok:
                 return r.json().get("data", [])
-            log.warning("Amadeus activities %s: %s", r.status_code, r.text[:300])
+            if r.status_code == 500:
+                log.debug("Amadeus sandbox 500 on activities — using fallback")
+            else:
+                log.warning("Amadeus activities %s: %s", r.status_code, r.text[:200])
         except Exception as e:
             log.warning("Amadeus activities error: %s", e)
         return []

@@ -42,14 +42,17 @@ class FlightMCP(BaseMCP):
         currency    = params.get("currency","GBP")
 
         if amadeus.configured:
-            raw = amadeus.flight_offers(origin, destination, date, adults, direct, currency)
-            if raw:
-                flights = [f for f in (_parse_offer(o, adults) for o in raw[:8]) if f]
-                if flights:
-                    flights.sort(key=lambda x: x["price_gbp"])
-                    return {"data":{"flights":flights,"route":f"{origin}→{destination}",
-                                    "date":date,"source":"live"},
-                            "count":len(flights)}
+            try:
+                raw = amadeus.flight_offers(origin, destination, date, adults, direct, currency)
+                if raw:
+                    flights = [f for f in (_parse_offer(o, adults) for o in raw[:8]) if f]
+                    if flights:
+                        flights.sort(key=lambda x: x["price_gbp"])
+                        return {"data":{"flights":flights,"route":f"{origin}→{destination}",
+                                        "date":date,"source":"live"},
+                                "count":len(flights)}
+            except Exception:
+                pass  # Fall through to estimated pricing
 
         return _mock_flights(origin, destination, date, adults, direct)
 

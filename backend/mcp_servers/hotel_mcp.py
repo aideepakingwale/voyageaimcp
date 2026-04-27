@@ -52,12 +52,15 @@ class HotelMCP(BaseMCP):
                          datetime.strptime(check_in, "%Y-%m-%d")).days)
 
         if amadeus.configured:
-            hotels = self._live(city, check_in, check_out, guests, rooms,
-                                nights, min_stars, needs_pool, family)
-            if hotels:
-                return {"data":{"hotels":hotels,"nights":nights,
-                                "city":city,"source":"live"},
-                        "count":len(hotels)}
+            try:
+                hotels = self._live(city, check_in, check_out, guests, rooms,
+                                    nights, min_stars, needs_pool, family)
+                if hotels:
+                    return {"data":{"hotels":hotels,"nights":nights,
+                                    "city":city,"source":"live"},
+                            "count":len(hotels)}
+            except Exception:
+                pass  # Fall through to estimated data
 
         return self._mock(city, check_in, check_out, guests, rooms,
                           nights, min_stars, needs_pool, family)
