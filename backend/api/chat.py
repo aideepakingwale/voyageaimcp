@@ -86,6 +86,20 @@ def chat():
             if val:
                 memory_store.store_entity(sid, key, val, confidence=1.0)
 
+    # Store detected/user origin airport in session
+    origin = body.get("origin_iata", "").strip().upper()
+    if origin and len(origin) == 3:
+        memory_store.store_entity(sid, "origin_iata", origin, confidence=1.0)
+    elif not memory_store.retrieve_entity(sid, "origin_iata"):
+        # Detect from request IP if not already known
+        from core.geo_location import locate_ip
+        ip  = (request.headers.get("X-Forwarded-For","").split(",")[0].strip()
+                or request.remote_addr or "")
+        geo = locate_ip(ip)
+        if geo and geo.get("iata"):
+            memory_store.store_entity(sid, "detected_origin_iata", geo["iata"], confidence=0.85)
+            memory_store.store_entity(sid, "detected_origin_city", geo["city"], confidence=0.85)
+
     t0     = time.time()
     result = get_engine().reason(message, sid)
     elapsed = round((time.time() - t0) * 1000)

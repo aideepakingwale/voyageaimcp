@@ -54,10 +54,18 @@ class ReasoningEngine:
         Full reasoning pipeline with retry loop.
         Returns a structured result dict suitable for JSON serialisation.
         """
+        # Ensure trace ID is set for this call chain
+        try:
+            from core.trace import get_trace_id, set_trace_id, new_trace_id
+            if get_trace_id() == "NO-TRACE":
+                set_trace_id(new_trace_id())
+        except Exception:
+            pass
+
         self._log.info("Reasoning started", extra={
-            "session_id": session_id,
+            "session_id":  session_id,
             "message_len": len(user_message),
-            "preview": user_message[:80],
+            "preview":     user_message,   # full message, no truncation
         })
         # Ensure session exists
         if not memory_store.get_session(session_id):
@@ -123,8 +131,16 @@ class ReasoningEngine:
             "fix_hint": fix_hint[:100] if fix_hint else None,
         })
         # Score which MCP servers are relevant
-        relevance  = self._mcp_scorer.score_all(user_message)
-        mcp_params = self._mcp_scorer.build_params(user_message, session_id)
+        relevance = self._mcp_scorer.score_all(user_message)
+
+        # Get origin airport: from session (user-provided) → detected → LHR
+        entities      = memory_store.retrieve_all_entities(session_id)
+        origin_iata   = (entities.get("origin_iata")
+                         or entities.get("detected_origin_iata")
+                         or "LHR")
+
+        mcp_params = self._mcp_scorer.build_params(user_message, session_id,
+                                                    origin_iata=origin_iata)
 
         # Call relevant MCP servers
         mcp_data = {}
@@ -160,12 +176,14 @@ class ReasoningEngine:
         confidence = self._conf_sc.compute(llm_scores, mcp_data, rag_recall)
 
         self._log.info("Reasoning pass complete", extra={
-            "attempt":    attempt,
-            "provider":   llm_resp.provider,
-            "model":      llm_resp.model,
-            "latency_ms": llm_resp.latency_ms,
-            "overall_conf": confidence.get("overall",0),
-            "passed":     confidence.get("passed", False),
+            "attempt":      attempt,
+            "provider":     llm_resp.provider,
+            "model":        llm_resp.model,
+            "latency_ms":   llm_resp.latency_ms,
+            "overall_conf": confidence.get("overall", 0),
+            "passed":       confidence.get("passed", False),
+            "dest":         llm_output.get("intent", {}).get("destination", ""),
+            "total_cost_gbp": llm_output.get("total_cost_gbp", 0),
         })
         return {
             "session_id":     session_id,

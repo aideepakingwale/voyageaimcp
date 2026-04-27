@@ -13,6 +13,8 @@ import { startTimer, stopTimer }           from './ui/gds_timer.js';
 import { startMcpAnimation, settleMcpChips,
          highlightProvider,
          applyWaterfallStatus }            from './ui/waterfall.js';
+import { initOrigin, getOriginIata,
+         getOriginDisplay }               from './ui/origin_selector.js';
 import { $, setText, autoResize, show,
          hide, setHTML }                   from './utils/dom.js';
 import { tierIcon, destIcon }              from './utils/format.js';
@@ -80,6 +82,9 @@ async function init() {
 
   // Create fresh session for this login
   state.setSessionId(auth.session_id);
+
+  // Init origin airport detection
+  initOrigin();
 
   // Load full customer profile (interests + recommendations)
   _loadCustomerProfile(auth.customer_id);
@@ -238,6 +243,12 @@ function _bindEvents(auth) {
 
   // Sign out
   $('#signoutBtn')?.addEventListener('click', () => doLogout(auth));
+
+  // When user changes origin airport, update state
+  window.addEventListener('originChanged', e => {
+    const { iata, display } = e.detail;
+    setText('#headerSub', `${auth.name} · Flying from ${display}`);
+  });
 }
 
 // ── Sign out ──────────────────────────────────────────────────
@@ -284,9 +295,10 @@ async function send() {
   } : null;
 
   try {
+    const originIata = getOriginIata();
     const data = Config.USE_DEMO
       ? await api.sendDemo(enrichedMsg, state.getSessionId())
-      : await api.sendChat(enrichedMsg, state.getSessionId(), ctx);
+      : await api.sendChat(enrichedMsg, state.getSessionId(), ctx, originIata);
 
     if (data.session_id) state.setSessionId(data.session_id);
     if (data.llm_provider) highlightProvider(data.llm_provider, 'ok');

@@ -1,8 +1,7 @@
 """
 VoyageAI LLM Waterfall
 Tries providers in order: Groq → Gemini → Anthropic → Template
-Each provider is tried once. On failure, moves to next.
-Tracks provider health, latency, and cost per session.
+First success is returned. Tracks latency, cost, success rate per provider.
 """
 import time, json, re
 from typing import Optional
@@ -16,11 +15,11 @@ from .template_provider  import TemplateProvider
 
 class LLMWaterfall:
     """
-    Zero-cost LLM routing strategy:
-    1. Groq       — FREE, fastest (~500 tok/s)
-    2. Gemini     — FREE, 15 req/min
-    3. Anthropic  — PAID fallback (Haiku, ~$0.001/call)
-    4. Template   — FREE, deterministic, always works
+    Zero-cost LLM routing:
+      1. Groq       — FREE, ~500 tok/s
+      2. Gemini     — FREE, 15 req/min
+      3. Anthropic  — PAID fallback
+      4. Template   — FREE, always works
     """
 
     def __init__(self):
@@ -44,25 +43,39 @@ class LLMWaterfall:
 
         self.waterfall_order = Config.LLM_WATERFALL
         self.stats = {
-            name: {
-                "calls": 0, "successes": 0, "failures": 0,
-                "total_cost": 0.0, "total_latency_ms": 0.0,
-            }
+            name: {"calls":0,"successes":0,"failures":0,
+                   "total_cost":0.0,"total_latency_ms":0.0}
             for name in self.providers
         }
+
+        # Logger — lazy init to avoid circular import at module load
+        self._log = None
+
         self._log_status()
 
-        from core.logging_config import get_logger
-        self._log = get_logger("llm.waterfall")
+    def _get_log(self):
+        if self._log is None:
+            try:
+                from core.logging_config import get_logger
+                self._log       = get_logger("llm.waterfall")
+                self._debug_log = get_logger("llm.debug")
+            except Exception:
+                import logging
+                self._log       = logging.getLogger("voyageai.llm.waterfall")
+                self._debug_log = logging.getLogger("voyageai.llm.debug")
+        return self._log
 
-    # ── Main entry point ──────────────────────────────────
+    # ── Main entry ────────────────────────────────────────────
+
     def complete(self, system: str, user: str,
-                 max_tokens: int = None,
+                 max_tokens: int  = None,
                  temperature: float = None) -> LLMResponse:
         """Try each provider in order. Return first success."""
         max_tokens  = max_tokens  or Config.LLM_MAX_TOKENS
         temperature = temperature or Config.LLM_TEMPERATURE
         attempts    = []
+        log         = self._get_log()
+        _debug_log  = self._debug_log
 
         for pname in self.waterfall_order:
             provider = self.providers.get(pname)
@@ -84,52 +97,40 @@ class LLMWaterfall:
             if resp.success:
                 st["successes"]  += 1
                 st["total_cost"] += resp.cost_usd
-                attempts.append({"provider": pname, "ok": True,
-                                  "ms": resp.latency_ms})
+                attempts.append({"provider": pname, "ok": True, "ms": resp.latency_ms})
                 resp.text     = self._clean_json(resp.text)
                 resp.attempts = attempts
-                if _HAS_LOGGER:
-                    _log.info("LLM SUCCESS",
-                              extra={
-                                  "request_id":  get_request_id(),
-                                  "provider":    pname,
-                                  "model":       resp.model,
-                                  "elapsed_ms":  resp.latency_ms,
-                                  "input_tokens":resp.input_tokens,
-                                  "output_tokens":resp.output_tokens,
-                                  "cost_usd":    resp.cost_usd,
-                                  "attempts":    len(attempts),
-                              })
+                log.info("LLM call succeeded", extra={
+                    "provider":     pname,
+                    "model":        resp.model,
+                    "latency_ms":   resp.latency_ms,
+                    "input_tokens": resp.input_tokens,
+                    "output_tokens":resp.output_tokens,
+                    "cost_usd":     resp.cost_usd,
+                    "attempt_num":  len(attempts),
+                })
                 return resp
             else:
                 st["failures"] += 1
-                attempts.append({"provider": pname, "ok": False,
-                                  "error": resp.error[:80]})
-                self._log.warning("LLM provider failed, trying next", extra={
+                attempts.append({"provider": pname, "ok": False, "error": resp.error[:80]})
+                log.warning("LLM provider failed, trying next", extra={
                     "provider":   pname,
                     "error":      resp.error[:120],
                     "latency_ms": resp.latency_ms,
                 })
-                if _HAS_LOGGER:
-                    _log.warning("LLM PROVIDER FAILED",
-                                 extra={
-                                     "request_id": get_request_id(),
-                                     "provider":   pname,
-                                     "elapsed_ms": resp.latency_ms,
-                                     "error":      resp.error[:120],
-                                 })
 
-        # Should never reach here (template always works)
+        # Should never reach here — template always works
         return LLMResponse(
             success=False, provider="waterfall",
             error=f"All providers failed: {attempts}"
         )
 
-    # ── Health / stats ────────────────────────────────────
+    # ── Stats ─────────────────────────────────────────────────
+
     def get_status(self) -> dict:
         result = {}
         for name, prov in self.providers.items():
-            st = self.stats[name]
+            st    = self.stats[name]
             calls = max(st["calls"], 1)
             result[name] = {
                 "available":      prov.is_available(),
@@ -141,7 +142,8 @@ class LLMWaterfall:
             }
         return result
 
-    # ── Internals ─────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────
+
     def _log_status(self):
         print("\n╔══════════════════════════════════╗")
         print("║   VoyageAI  LLM Waterfall        ║")
@@ -155,15 +157,14 @@ class LLMWaterfall:
         print("╚══════════════════════════════════╝\n")
 
     def _clean_json(self, text: str) -> str:
+        """Strip markdown fences, extract JSON object."""
         text = text.strip()
-        # Strip markdown fences
         if "```" in text:
             parts = text.split("```")
             if len(parts) >= 3:
                 text = parts[1]
                 if text.startswith("json"):
                     text = text[4:]
-        # Strip any leading/trailing non-JSON chars
         start = text.find("{")
         end   = text.rfind("}")
         if start != -1 and end != -1:
@@ -171,8 +172,9 @@ class LLMWaterfall:
         return text.strip()
 
 
-# ── Singleton ─────────────────────────────────────────────
+# ── Singleton ─────────────────────────────────────────────────
 _waterfall: Optional[LLMWaterfall] = None
+
 
 def get_waterfall() -> LLMWaterfall:
     global _waterfall

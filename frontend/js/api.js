@@ -33,8 +33,8 @@ export const confirmElement = (sid, element, data, action = 'confirm') =>
 
 // ── Chat ──────────────────────────────────────────────────────
 
-export const sendChat = (message, sessionId, customerContext = null) =>
-  post('/chat', { message, session_id: sessionId, customer_context: customerContext });
+export const sendChat = (message, sessionId, customerContext = null, originIata = null) =>
+  post('/chat', { message, session_id: sessionId, customer_context: customerContext, origin_iata: originIata });
 
 export const sendDemo = (message, sessionId) =>
   post('/demo', { message, session_id: sessionId });

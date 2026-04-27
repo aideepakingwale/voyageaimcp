@@ -22,11 +22,12 @@ class BusinessRulesGuardrail:
         budget = intent.get("budget_gbp", float("inf"))
         guests = intent.get("guests", 1)
 
-        # Rule 1: Budget cap (only check if budget was explicitly stated)
-        if total > 0 and budget < 99000 and total > budget * (1 + Config.MAX_BUDGET_OVERSHOOT):
+        # Rule 1: Budget — soft warning only (do not hard-block; user decides)
+        # Hard block only if >50% over budget (likely a data error)
+        if total > 0 and budget < 99000 and total > budget * 1.50:
             violations.append(
-                f"Total cost £{total:.0f} exceeds budget £{budget:.0f} "
-                f"by more than {Config.MAX_BUDGET_OVERSHOOT:.0%}"
+                f"Total cost £{total:.0f} is more than 50% over budget £{budget:.0f} "
+                f"— likely a data error, please check"
             )
 
         # Rule 2: Departure date in future

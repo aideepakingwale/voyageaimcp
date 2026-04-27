@@ -42,11 +42,25 @@ class TemplateProvider(BaseProvider):
     def _build_itinerary(self, prompt: str) -> dict:
         """Parse prompt for MCP data blocks and build structured itinerary."""
 
-        # Extract destination
-        dest_match = re.search(r"destination.*?[:\"]([A-Z]{2,20})", prompt, re.I)
-        dest_city  = dest_match.group(1).title() if dest_match else "Lisbon"
-        dest_code  = {"Lisbon":"LIS","Barcelona":"BCN","Paris":"CDG",
-                      "Rome":"FCO","Madrid":"MAD"}.get(dest_city, "LIS")
+        # Extract destination using shared map (same as MCPRelevanceScorer)
+        try:
+            from reasoning.mcp_scorer import extract_destination
+            _CN = {"LIS":"Lisbon","BCN":"Barcelona","MAD":"Madrid","FCO":"Rome",
+                   "CDG":"Paris","AMS":"Amsterdam","ATH":"Athens","DXB":"Dubai",
+                   "NRT":"Tokyo","SIN":"Singapore","SEZ":"Seychelles","MLE":"Maldives",
+                   "DPS":"Bali","BKK":"Bangkok","MRU":"Mauritius","JFK":"New York",
+                   "CPT":"Cape Town","LAX":"Los Angeles","SYD":"Sydney","AKL":"Auckland",
+                   "NCE":"Nice","JTR":"Santorini","HKT":"Phuket","ZRH":"Zurich",
+                   "VIE":"Vienna","GVA":"Geneva","PRG":"Prague","BUD":"Budapest",
+                   "CMN":"Casablanca","RAK":"Marrakech","NBO":"Nairobi",
+                   "GOI":"Goa","DEL":"Delhi","BOM":"Mumbai","CMB":"Sri Lanka",
+                   "KUL":"Kuala Lumpur","ICN":"Seoul","HKG":"Hong Kong",
+                   "OPO":"Porto","FAO":"Algarve","TFS":"Tenerife","PMI":"Mallorca",
+                   "JMK":"Mykonos","CFU":"Corfu","HER":"Crete","KEF":"Reykjavik"}
+            dest_code, country_code = extract_destination(prompt, {})
+            dest_city = _CN.get(dest_code, dest_code.title())
+        except Exception:
+            dest_code = "LIS"; country_code = "PT"; dest_city = "Lisbon"
 
         # Extract guests
         guests_m = re.search(r'"guests"\s*:\s*(\d+)', prompt)
@@ -100,7 +114,7 @@ class TemplateProvider(BaseProvider):
             "intent": {
                 "destination":  dest_city,
                 "city_code":    dest_code,
-                "country_code": dest_code[:2] if len(dest_code) >= 2 else "PT",
+                "country_code": country_code,
                 "dates": {
                     "departure_date": dep_date,
                     "return_date":    ret_date,

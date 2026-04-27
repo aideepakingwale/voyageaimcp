@@ -329,3 +329,113 @@ textarea::placeholder { color: var(--dim); }
   color:        var(--red);
   background:   rgba(231,76,60,.06);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Origin Airport Pill + Modal
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Pill in header ── */
+.origin-pill {
+  display:      flex;
+  align-items:  center;
+  gap:          6px;
+  padding:      5px 12px;
+  border-radius:20px;
+  font-size:    12px;
+  cursor:       pointer;
+  transition:   all .2s;
+  white-space:  nowrap;
+  max-width:    220px;
+  overflow:     hidden;
+}
+.origin-pill.detecting {
+  background: rgba(61,90,107,.2);
+  border:     1px solid var(--border);
+  color:      var(--dim);
+  animation:  blink 1.2s infinite;
+  cursor:     default;
+}
+.origin-pill.ask {
+  background: rgba(243,156,18,.1);
+  border:     1px dashed rgba(243,156,18,.5);
+  color:      var(--amber);
+}
+.origin-pill.ask:hover { background: rgba(243,156,18,.18); }
+.origin-pill.set {
+  background: rgba(0,201,167,.08);
+  border:     1px solid rgba(0,201,167,.35);
+  color:      var(--teal);
+}
+.origin-pill.set:hover { background: rgba(0,201,167,.14); }
+
+.op-icon  { font-size:14px; flex-shrink:0; }
+.op-iata  { font-weight:700; font-family:var(--mono); letter-spacing:.5px; }
+.op-text  { overflow:hidden; text-overflow:ellipsis; }
+.op-change{ font-size:10px; color:var(--muted); flex-shrink:0; margin-left:2px; }
+
+/* ── Modal backdrop ── */
+#originModal {
+  position: fixed; inset:0; z-index:1000;
+  display:  flex; align-items:center; justify-content:center;
+}
+.om-backdrop {
+  position:absolute; inset:0;
+  background:rgba(4,12,24,.8);
+  backdrop-filter:blur(4px);
+}
+.om-card {
+  position:      relative;
+  width:         min(480px,92vw);
+  background:    var(--bg2);
+  border:        1px solid var(--border);
+  border-radius: var(--radius);
+  overflow:      hidden;
+  box-shadow:    0 24px 64px rgba(0,0,0,.6);
+  animation:     fadeUp .2s ease;
+}
+.om-header {
+  display:        flex;
+  align-items:    center;
+  justify-content:space-between;
+  padding:        16px 18px;
+  border-bottom:  1px solid var(--border);
+  background:     var(--bg3);
+}
+.om-title { font-size:15px; font-weight:700; }
+.om-close {
+  background:none; border:none; color:var(--muted);
+  font-size:16px; cursor:pointer; padding:4px 8px; border-radius:6px;
+  transition:all .2s;
+}
+.om-close:hover { color:var(--red); background:rgba(231,76,60,.1); }
+
+.om-body    { padding:18px; }
+.om-current { font-size:12px; color:var(--muted); margin-bottom:12px; }
+
+.om-input {
+  width:100%; background:var(--bg3); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:11px 14px;
+  color:var(--text); font-family:var(--font); font-size:14px; outline:none;
+  transition:border-color .2s;
+}
+.om-input:focus { border-color:var(--teal); }
+
+.om-suggestions { margin-top:6px; max-height:180px; overflow-y:auto; }
+.om-sug {
+  display:flex; align-items:center; gap:12px;
+  padding:9px 12px; border-radius:var(--radius-xs);
+  cursor:pointer; transition:background .15s;
+}
+.om-sug:hover     { background:rgba(0,201,167,.08); }
+.om-sug-iata      { font-family:var(--mono); font-weight:700; color:var(--teal); width:38px; flex-shrink:0; }
+.om-sug-city      { font-size:13px; color:var(--text); }
+.om-sug-none      { font-size:12px; color:var(--dim); padding:10px 12px; }
+
+.om-tips  { margin-top:14px; display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+.om-tips > span:first-child { font-size:11px; color:var(--dim); margin-right:2px; }
+.om-chip  {
+  font-size:11px; padding:4px 10px; border-radius:14px;
+  background:var(--bg3); border:1px solid var(--border);
+  color:var(--muted); cursor:pointer; transition:all .2s;
+}
+.om-chip:hover { border-color:var(--teal); color:var(--teal); }

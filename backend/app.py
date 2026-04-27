@@ -30,6 +30,7 @@ def _register_blueprints(app):
     from api.ancillaries import bp as ancillaries_bp
     from api.mcp         import bp as mcp_bp
     from api.auth        import bp as auth_bp
+    from api.locate      import bp as locate_bp
 
     app.register_blueprint(health_bp,      url_prefix="/api")
     app.register_blueprint(session_bp,     url_prefix="/api")
@@ -39,6 +40,7 @@ def _register_blueprints(app):
     app.register_blueprint(ancillaries_bp, url_prefix="/api")
     app.register_blueprint(mcp_bp,         url_prefix="/api")
     app.register_blueprint(auth_bp,        url_prefix="/api")
+    app.register_blueprint(locate_bp,      url_prefix="/api")
 
 
 def _log_startup():
