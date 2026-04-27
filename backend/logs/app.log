@@ -1,0 +1,2 @@
+{"ts": "2026-04-27T09:38:33.165541+00:00", "level": "DEBUG", "logger": "voyage.app", "message": "Logging ready", "module": "logging_config", "function": "setup_logging", "line": 106, "taskName": null, "log_dir": "/home/claude/voyageai/backend/core/../logs"}
+{"ts": "2026-04-27T09:38:47.897461+00:00", "level": "DEBUG", "logger": "voyage.app", "message": "Logging ready", "module": "logging_config", "function": "setup_logging", "line": 106, "taskName": null, "log_dir": "/home/claude/voyageai/backend/core/../logs"}

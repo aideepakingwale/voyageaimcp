@@ -52,6 +52,9 @@ class LLMWaterfall:
         }
         self._log_status()
 
+        from core.logging_config import get_logger
+        self._log = get_logger("llm.waterfall")
+
     # ── Main entry point ──────────────────────────────────
     def complete(self, system: str, user: str,
                  max_tokens: int = None,
@@ -85,11 +88,36 @@ class LLMWaterfall:
                                   "ms": resp.latency_ms})
                 resp.text     = self._clean_json(resp.text)
                 resp.attempts = attempts
+                if _HAS_LOGGER:
+                    _log.info("LLM SUCCESS",
+                              extra={
+                                  "request_id":  get_request_id(),
+                                  "provider":    pname,
+                                  "model":       resp.model,
+                                  "elapsed_ms":  resp.latency_ms,
+                                  "input_tokens":resp.input_tokens,
+                                  "output_tokens":resp.output_tokens,
+                                  "cost_usd":    resp.cost_usd,
+                                  "attempts":    len(attempts),
+                              })
                 return resp
             else:
                 st["failures"] += 1
                 attempts.append({"provider": pname, "ok": False,
                                   "error": resp.error[:80]})
+                self._log.warning("LLM provider failed, trying next", extra={
+                    "provider":   pname,
+                    "error":      resp.error[:120],
+                    "latency_ms": resp.latency_ms,
+                })
+                if _HAS_LOGGER:
+                    _log.warning("LLM PROVIDER FAILED",
+                                 extra={
+                                     "request_id": get_request_id(),
+                                     "provider":   pname,
+                                     "elapsed_ms": resp.latency_ms,
+                                     "error":      resp.error[:120],
+                                 })
 
         # Should never reach here (template always works)
         return LLMResponse(

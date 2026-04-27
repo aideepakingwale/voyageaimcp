@@ -44,3 +44,6 @@ class Config:
     GDS_SESSION_TIMEOUT      = 600
 
     CORS_ORIGINS = ["*"]
+
+    # ── Logging ──────────────────────────────────────────
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')  # INFO | DEBUG

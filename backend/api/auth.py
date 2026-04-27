@@ -7,9 +7,16 @@ import sqlite3
 import os
 from flask import Blueprint, jsonify, request, session
 from rag.memory_store import memory_store
+from core.logging_config  import get_logger
+from core.request_context import get_request_id
+
+_log = get_logger("auth")
 
 bp      = Blueprint("auth", __name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), "../data/voyageai.db")
+
+from core.logging_config import get_logger
+_log = get_logger("auth")
 
 # In-memory active sessions: session_token → customer_id
 _active_logins: dict[str, str] = {}
@@ -56,6 +63,10 @@ def login():
         """, (email, member_id)).fetchone()
 
         if not row:
+            _log.warning("LOGIN FAILED",
+                         extra={"request_id": get_request_id(),
+                                "email": email[:20],
+                                "member_id": member_id})
             return jsonify({
                 "error": "Invalid email or Member ID. Please check your credentials."
             }), 401
@@ -75,11 +86,24 @@ def login():
         memory_store.store_entity(sid, "customer_name", row["name"],  1.0)
         memory_store.store_entity(sid, "loyalty_tier",  row["tier"],  1.0)
 
+        _log.info("LOGIN SUCCESS",
+                     extra={"request_id": get_request_id(),
+                            "customer_id": row["id"],
+                            "customer_name": row["name"],
+                            "tier":        row["tier"],
+                            "member_id":   row["member_id"]})
+        _log.info("Login success", extra={
+            "customer_id": row["id"],
+            "customer_name": row["name"],
+            "tier":        row["tier"],
+            "member_id":   row["member_id"],
+            "ip":          request.remote_addr,
+        })
         return jsonify({
             "token":       token,
             "session_id":  sid,
             "customer_id": row["id"],
-            "name":        row["name"],
+            "customer_name": row["name"],
             "email":       row["email"],
             "tier":        row["tier"],
             "member_id":   row["member_id"],
@@ -116,6 +140,8 @@ def logout():
         s["history"]   = []
         s["confirmed"] = {}
 
+    _log.info("LOGOUT", extra={"request_id": get_request_id(), "token_prefix": token[:6]})
+    _log.info("Logout", extra={"token_prefix": token[:4] if token else ""})
     return jsonify({"logged_out": True})
 
 

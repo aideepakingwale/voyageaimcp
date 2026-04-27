@@ -15,6 +15,14 @@ Flow:
 """
 import json
 from config        import Config
+
+try:
+    from core.logging_config  import get_logger
+    from core.request_context import get_request_id, set_request_id
+    _log = get_logger("app")
+    _HAS_LOGGER = True
+except ImportError:
+    _HAS_LOGGER = False
 from llm           import get_waterfall
 from mcp_servers   import MCP_REGISTRY
 from guardrails    import GuardrailOrchestrator
@@ -36,6 +44,8 @@ class ReasoningEngine:
         self._mcp_scorer = MCPRelevanceScorer()
         self._conf_sc    = ConfidenceScorer()
         self._guardrail  = GuardrailOrchestrator()
+        from core.logging_config import get_logger
+        self._log = get_logger("reasoning")
 
     # ── PUBLIC ────────────────────────────────────────────────
 
@@ -44,6 +54,11 @@ class ReasoningEngine:
         Full reasoning pipeline with retry loop.
         Returns a structured result dict suitable for JSON serialisation.
         """
+        self._log.info("Reasoning started", extra={
+            "session_id": session_id,
+            "message_len": len(user_message),
+            "preview": user_message[:80],
+        })
         # Ensure session exists
         if not memory_store.get_session(session_id):
             session_id = memory_store.create_session()
@@ -60,6 +75,12 @@ class ReasoningEngine:
         fix_hint:    str         = ""
 
         for attempt in range(1, Config.MAX_RETRY_ITERATIONS + 1):
+            if _HAS_LOGGER:
+                _log.info("REASONING ATTEMPT",
+                          extra={"request_id": get_request_id(),
+                                 "session_id": session_id,
+                                 "attempt": attempt,
+                                 "fix_hint": fix_hint[:80] if fix_hint else ""})
             try:
                 result = self._single_pass(user_message, session_id, attempt, fix_hint)
             except Exception as exc:
@@ -84,6 +105,11 @@ class ReasoningEngine:
                 fix_hint = f"Layer {fix.layer} failed: {fix.reason}. {self._fix_for_layer(fix.layer)}"
 
         # All retries exhausted
+        if _HAS_LOGGER:
+            _log.warning("HUMAN HANDOFF",
+                         extra={"request_id": get_request_id(),
+                                "session_id": session_id,
+                                "reason": "max retries exhausted"})
         return self._human_handoff(last_result, session_id)
 
     # ── PRIVATE: SINGLE PASS ──────────────────────────────────
@@ -92,6 +118,10 @@ class ReasoningEngine:
                      attempt: int, fix_hint: str) -> dict:
         """One full reasoning pass: MCP → LLM → confidence."""
 
+        self._log.info("Reasoning attempt %d", attempt, extra={
+            "session_id": session_id, "attempt": attempt,
+            "fix_hint": fix_hint[:100] if fix_hint else None,
+        })
         # Score which MCP servers are relevant
         relevance  = self._mcp_scorer.score_all(user_message)
         mcp_params = self._mcp_scorer.build_params(user_message, session_id)
@@ -129,6 +159,14 @@ class ReasoningEngine:
         llm_scores = llm_output.get("confidence_scores", {})
         confidence = self._conf_sc.compute(llm_scores, mcp_data, rag_recall)
 
+        self._log.info("Reasoning pass complete", extra={
+            "attempt":    attempt,
+            "provider":   llm_resp.provider,
+            "model":      llm_resp.model,
+            "latency_ms": llm_resp.latency_ms,
+            "overall_conf": confidence.get("overall",0),
+            "passed":     confidence.get("passed", False),
+        })
         return {
             "session_id":     session_id,
             "attempt":        attempt,
@@ -163,6 +201,14 @@ class ReasoningEngine:
             "awaiting_confirmation" if action_check.action == "human_confirm"
             else "ready"
         )
+        if _HAS_LOGGER:
+            _log.info("REASONING COMPLETE",
+                      extra={"request_id": get_request_id(),
+                             "session_id": session_id,
+                             "status": result["status"],
+                             "provider": result.get("llm_provider",""),
+                             "confidence": result.get("confidence",{}).get("overall",0),
+                             "attempt": result.get("attempt",1)})
         memory_store.add_turn(
             session_id, "assistant",
             result["llm_output"].get("summary", ""),
@@ -201,6 +247,11 @@ class ReasoningEngine:
         }
 
     def _human_handoff(self, last_result: dict | None, session_id: str) -> dict:
+        self._log.warning("Human handoff triggered", extra={
+            "session_id":  session_id,
+            "max_attempts":Config.MAX_RETRY_ITERATIONS,
+            "last_conf":   (last_result or {}).get("confidence",{}).get("overall",0),
+        })
         return {
             "session_id":  session_id,
             "status":      "human_handoff",
