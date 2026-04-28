@@ -172,21 +172,25 @@ def _run_modification(session_id, message, intent, last_itinerary, origin_iata, 
     patched = apply_modification(session_id, intent) or last_itinerary
 
     # Update session entities
-    if extracted.get("departure_date"):
-        memory_store.store_entity(session_id, "departure_date",
-                                   extracted["departure_date"], 0.99)
-    if extracted.get("nights"):
-        memory_store.store_entity(session_id, "nights",
-                                   extracted["nights"], 0.99)
-    if extracted.get("guests"):
-        memory_store.store_entity(session_id, "guests",
-                                   extracted["guests"], 0.99)
-    if extracted.get("budget_gbp"):
-        memory_store.store_entity(session_id, "budget_gbp",
-                                   extracted["budget_gbp"], 0.99)
-    if extracted.get("min_stars"):
-        memory_store.store_entity(session_id, "min_hotel_stars",
-                                   extracted["min_stars"], 0.99)
+    # Store ALL changed entities BEFORE engine runs so MCP scorer reads fresh values
+    entity_map = {
+        "departure_date": extracted.get("departure_date"),
+        "return_date":    patched.get("intent",{}).get("dates",{}).get("return_date"),
+        "nights":         extracted.get("nights") or patched.get("intent",{}).get("dates",{}).get("nights"),
+        "guests":         extracted.get("guests") or patched.get("intent",{}).get("guests"),
+        "adults":         extracted.get("adults") or patched.get("intent",{}).get("adults"),
+        "children":       extracted.get("children") or patched.get("intent",{}).get("children"),
+        "budget_gbp":     extracted.get("budget_gbp") or patched.get("intent",{}).get("budget_gbp"),
+        "city_code":      patched.get("intent",{}).get("city_code"),
+        "min_hotel_stars":extracted.get("min_stars") or patched.get("intent",{}).get("preferences",{}).get("min_hotel_stars"),
+    }
+    for key, val in entity_map.items():
+        if val is not None:
+            memory_store.store_entity(session_id, key, val, 0.99)
+
+    # Sync to DB immediately so restore works
+    update_entities(session_id, memory_store.retrieve_all_entities(session_id))
+    log.info("Entities updated for modification", extra={"session": session_id, "entities": entity_map})
 
     # Build complete prompt from patched intent
     rebuilt = _build_prompt(patched, subtype)

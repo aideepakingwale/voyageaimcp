@@ -369,23 +369,39 @@ async function _handleResponse(data) {
   }
 
   // ── Modification result ───────────────────────────────────
-  if (data.is_modification && data.llm_output) {
+  if ((data.is_modification || data.conversation_state === 'modified') && data.llm_output) {
     const out  = data.llm_output;
     const conf = data.confidence || { overall: 0.88, passed: true };
-    const ac   = { passed: true, action: 'proceed' };
-    const meta = { p: 'conversation_engine', m: '', ms: 0, cost: 0 };
+    const ac   = data.action_check || { passed: true, action: 'proceed' };
+    const meta = { p: data.llm_provider || 'conversation_engine',
+                   m: '', ms: data.elapsed_ms || 0, cost: 0 };
 
-    // Show modification banner
     const modType = data.modification_type || 'plan';
-    const modLabel = {
-      dates:'Dates Updated', guests:'Guests Updated', hotel:'Hotel Updated',
-      flight:'Flight Updated', budget:'Budget Updated', destination:'Destination Updated'
-    }[modType] || 'Plan Updated';
+    const icons   = { dates:'📅', guests:'👥', hotel:'🏨', flight:'✈️',
+                      budget:'💷', destination:'📍' };
+    const labels  = { dates:'Dates Updated', guests:'Guests Updated',
+                      hotel:'Hotel Updated', flight:'Flights Updated',
+                      budget:'Budget Updated', destination:'Destination Changed' };
+    const icon    = icons[modType]  || '✏️';
+    const label   = labels[modType] || 'Plan Updated';
 
-    appendAI(`✏️ <strong style="color:var(--teal)">${modLabel}</strong> — 
-      <span style="color:var(--muted)">Refreshed with new ${modType} below</span>`);
+    // Show the summary message from backend
+    const summary = out.summary || `${icon} ${label}`;
+    appendAI(summary);
 
+    // Always re-render the full itinerary card with updated data
     await renderItineraryCard(out, conf, ac, meta, data);
+
+    // Show version history if available
+    if (data.version_history && data.version_history.length > 1) {
+      const hist = data.version_history;
+      const timeline = hist.map((v, i) =>
+        `<span style="color:${i===hist.length-1 ? 'var(--teal)' : 'var(--dim)'}">
+          v${v.version} ${v.modification_type || 'initial'} £${Math.round(v.total_cost_gbp||0).toLocaleString()}
+         </span>`
+      ).join(' → ');
+      appendAI(`<small style="color:var(--dim)">Version history: ${timeline}</small>`);
+    }
     return;
   }
 

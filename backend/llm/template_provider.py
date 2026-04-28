@@ -65,22 +65,65 @@ class TemplateProvider(BaseProvider):
         except Exception:
             dest_code = "LIS"; country_code = "PT"; dest_city = "Lisbon"
 
-        # Extract guests
-        guests_m = re.search(r'"guests"\s*:\s*(\d+)', prompt)
-        guests   = int(guests_m.group(1)) if guests_m else 2
+        # Extract guests — handle both JSON and natural language formats
+        # "N adults and M children", "N adults", "guests": N
+        adults_m   = re.search(r'(\d+)\s*adults?', prompt, re.IGNORECASE)
+        children_m = re.search(r'(\d+)\s*(?:children|child|kids?)', prompt, re.IGNORECASE)
+        guests_m   = re.search(r'"guests"\s*:\s*(\d+)', prompt)
+        family_m   = re.search(r'family of (\d+)', prompt, re.IGNORECASE)
 
-        # Extract budget
+        if adults_m and children_m:
+            adults   = int(adults_m.group(1))
+            children = int(children_m.group(1))
+            guests   = adults + children
+        elif guests_m:
+            guests   = int(guests_m.group(1))
+            adults   = max(1, guests - (int(children_m.group(1)) if children_m else 0))
+            children = int(children_m.group(1)) if children_m else 0
+        elif family_m:
+            guests   = int(family_m.group(1))
+            adults   = max(1, guests // 2); children = guests - adults
+        elif adults_m:
+            adults   = int(adults_m.group(1))
+            children = int(children_m.group(1)) if children_m else 0
+            guests   = adults + children
+        else:
+            guests = 2; adults = 2; children = 0
+
+        # Extract budget — "Budget: GBP N", "£N", JSON "budget_gbp": N
+        budg_kw  = re.search(r'Budget:\s*(?:GBP|£)\s*([\d,]+)', prompt, re.IGNORECASE)
+        budg_gbp = re.search(r'[£$]([\d,]+)', prompt)
         budget_m = re.search(r'"budget_gbp"\s*:\s*([\d.]+)', prompt)
-        budget   = float(budget_m.group(1)) if budget_m else 3000
 
-        # Extract nights
+        budget = (float(budg_kw.group(1).replace(",",""))  if budg_kw
+                  else float(budget_m.group(1))             if budget_m
+                  else float(budg_gbp.group(1).replace(",","")) if budg_gbp
+                  else 3000)
+
+        # Extract nights — handle "Duration: N nights", "N nights", JSON "nights": N
+        dur_kw   = re.search(r'Duration:\s*(\d+)\s*nights?', prompt, re.IGNORECASE)
         nights_m = re.search(r'"nights"\s*:\s*(\d+)', prompt)
-        nights   = int(nights_m.group(1)) if nights_m else 7
+        nights_t = re.search(r'(\d+)\s*nights?', prompt, re.IGNORECASE)
+        weeks_t  = re.search(r'(\d+)\s*weeks?', prompt, re.IGNORECASE)
+
+        nights = (int(dur_kw.group(1))    if dur_kw
+                  else int(nights_m.group(1)) if nights_m
+                  else int(nights_t.group(1)) if nights_t
+                  else int(weeks_t.group(1))*7 if weeks_t
+                  else 7)
 
         # Extract departure date
-        dep_m    = re.search(r'"departure_date"\s*:\s*"([\d-]+)"', prompt)
-        dep_date = dep_m.group(1) if dep_m else (
-            datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+        # Priority 1: "Departure: YYYY-MM-DD" (from modification prompt)
+        dep_kw = re.search(r"Departure:\s*(20\d\d-\d{2}-\d{2})", prompt)
+        # Priority 2: any ISO date in the prompt
+        iso_all = re.findall(r"20\d\d-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])", prompt)
+        # Priority 3: JSON field "departure_date": "..."
+        dep_m   = re.search(r'"departure_date"\s*:\s*"([\d-]+)"', prompt)
+
+        dep_date = (dep_kw.group(1) if dep_kw
+                    else iso_all[0] if iso_all
+                    else dep_m.group(1) if dep_m
+                    else (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d"))
         ret_date = (datetime.strptime(dep_date, "%Y-%m-%d") +
                     timedelta(days=nights)).strftime("%Y-%m-%d")
 

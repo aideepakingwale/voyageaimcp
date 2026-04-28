@@ -196,10 +196,22 @@ class MCPRelevanceScorer:
             (entities.get("departure_date", f"{datetime.now().year}-08-01") or "").split("-")[1]
             if entities.get("departure_date") else "8"
         )
-        check_in  = entities.get("departure_date",
-                    (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d"))
-        check_out = entities.get("return_date",
-                    (datetime.now() + timedelta(days=60 + nights)).strftime("%Y-%m-%d"))
+        # Extract date from prompt text first (handles modification prompts)
+        # "Departure: 2026-09-15" or any ISO date in the prompt
+        _dep_kw   = re.search(r"Departure:\s*(20\d\d-\d{2}-\d{2})", text, re.IGNORECASE)
+        _iso_all  = re.findall(r"20\d\d-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])", text)
+        _dur_kw   = re.search(r"Duration:\s*(\d+)\s*nights?", text, re.IGNORECASE)
+        if _dur_kw: nights = int(_dur_kw.group(1))
+
+        _prompt_date = (_dep_kw.group(1) if _dep_kw
+                        else _iso_all[0] if _iso_all else None)
+        _entity_date = entities.get("departure_date")
+
+        # Prompt text wins over stale entity (modification prompts have fresh dates)
+        check_in  = (_prompt_date or _entity_date or
+                     (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d"))
+        check_out = (datetime.strptime(check_in, "%Y-%m-%d") +
+                     timedelta(days=nights)).strftime("%Y-%m-%d")
 
         passport  = entities.get("passport_country", "GB")
 
