@@ -1,27 +1,23 @@
 """
 VoyageAI Reference Cache
-========================
-Singleton built once at application startup from data/reference_data.py.
-Provides O(1) lookups for airports, currencies, countries, cities.
+=========================
+Singleton built once at application startup.
+Load order:  DB (ref_* tables) → Python dicts (reference_data.py) → empty
 
 Usage:
     from core.reference_cache import ref
 
-    ref.is_airport("DXB")        → True
-    ref.is_currency("AED")       → True
-    ref.is_country_code("AE")    → True
-    ref.is_non_airport("UAE")    → True   (3-letter but NOT an airport)
-    ref.airport("DXB")           → {"name":"Dubai International","city":"Dubai",...}
-    ref.currency("AED")          → {"name":"UAE Dirham","symbol":"د.إ",...}
-    ref.country("AE")            → {"name":"United Arab Emirates","currency":"AED",...}
-    ref.city_to_iata("dubai")    → "DXB"
-    ref.iata_to_currency("DXB") → "AED"
-    ref.iata_to_country("DXB")  → "AE"
-    ref.gbp_rate("AED")         → 4.672
-    ref.all_airport_codes()      → frozenset of all valid IATA codes
-    ref.all_currency_codes()     → frozenset of all ISO 4217 codes
-    ref.all_country_codes()      → frozenset of all ISO 3166-1 alpha-2 codes
-    ref.all_non_airport_3char()  → frozenset of 3-letter codes that are NOT airports
+    ref.is_airport("DXB")             True
+    ref.is_currency("AED")            True
+    ref.is_country_code("AE")         True
+    ref.should_validate_as_iata("UAE") False  (country abbrev, not airport)
+    ref.airport("DXB")                {"name":"Dubai International","city":"Dubai",...}
+    ref.currency("AED")               {"name":"UAE Dirham","symbol":"\u062f.\u0625",...}
+    ref.country("AE")                 {"name":"United Arab Emirates","currency":"AED",...}
+    ref.city_to_iata("dubai")         "DXB"
+    ref.iata_to_currency("DXB")       "AED"
+    ref.iata_to_country("DXB")        "AE"
+    ref.gbp_rate("AED")               4.672
 """
 import logging
 import time
@@ -29,134 +25,198 @@ from typing import Optional
 
 log = logging.getLogger("voyageai.app")
 
+# Common 3-letter abbreviations that are NEVER airport codes
+_NEVER_AIRPORT = frozenset([
+    # ISO 4217 currency codes (3 letters)
+    "GBP","EUR","USD","AED","SAR","QAR","KWD","OMR","BHD","JOD","ILS","EGP",
+    "TRY","MAD","TND","DZD","ZAR","KES","TZS","UGX","ETB","NGN","GHS","MUR",
+    "SCR","RWF","SGD","JPY","HKD","KRW","CNY","TWD","THB","IDR","MYR","PHP",
+    "VND","KHR","LKR","MVR","NPR","PKR","BDT","INR","AUD","NZD","FJD","XPF",
+    "CHF","NOK","SEK","DKK","ISK","CZK","PLN","HUF","RON","BGN","HRK","CAD",
+    "MXN","BRL","ARS","CLP","PEN","COP","UAH","BYN","RUB","GEL","AMD","AZN",
+    "KZT","UZS","ALL","BAM","MKD","RSD","MDL","MMK","LAK","MNT","XOF","XAF",
+    "XCD","HTG","JMD","BBD","TTD","BSD","KYD","AWG","ANG","SRD","PYG","UYU",
+    "BOB","NIO","GTQ","BZD","DOP","PAB","CRC","HNL","PGK","SBD","VUV","WST",
+    "TOP","GNF","SLL","LRD","CVE","KMF","MGA","BMD","GMD","MRO","STN","DJF",
+    "SOS","ERN","ZMW","ZWL","MWK","MZN","BWP","NAD","SZL","LSL","IRR","IQD",
+    "SYP","AFN","YER","SSP","AOA","CDF","SDG","LYD","IRR",
+    # 3-letter country/territory abbreviations (not IATA)
+    "UAE","KSA","USA","GBR","CHN","JPN","KOR","AUS","NZL","IND","PAK","BGD",
+    "LKA","THA","IDN","MYS","PHL","VNM","ZAF","KEN","TZA","ETH","NGA","GHA",
+    "MAR","TUN","TUR","ISR","JOR","LBN","IRN","IRQ","SYR","YEM","FRA","DEU",
+    "ITA","ESP","PRT","GRC","NLD","BEL","CHE","AUT","POL","CZE","HUN","ROU",
+    "BGR","HRV","SRB","MNE","ALB","MKD","SVN","SVK","UKR","BLR","MDA","GEO",
+    "ARM","AZR","KAZ","UZB","TKM","KGZ","TJK","MNG","LAO","KHM","BRN","TWN",
+    "MAC","PNG","SLB","VUT","WSM","TON","KIR","TUV","NRU","FSM","PLW","COK",
+    # Tech/business abbreviations
+    "API","URL","PDF","CSS","LLM","MCP","RAG","GDS","ETA","VIP","TBC","TBD",
+    "PRO","GDP","VAT","TAX","SLA","ROI","KPI","CRM","SRC","DST","DEP","ARR",
+    "DUR","LEG","PAX","ADT","CHD","INF","AGT","OPT","MOD","NUM","REF","EST",
+    "AVG","STD","MIN","MAX","GPS","ETD","ETB","MON","TUE","WED","THU","FRI",
+    "SAT","SUN","JAN","FEB","MAR","APR","JUN","JUL","AUG","SEP","OCT","NOV",
+    "DEC","ETE","GPS","PNR","GDS",
+])
+
 
 class ReferenceCache:
     """
-    Startup cache for all reference data.
-    Built once, read many times.
-    Thread-safe (immutable after build).
+    In-memory cache built from DB at startup.
+    Primary source: ref_* SQLite tables.
+    Fallback: data/reference_data.py Python dicts.
     """
 
     def __init__(self):
         self._built      = False
         self._build_time = 0.0
+        self._source     = "empty"
 
-        # Primary stores (populated by build())
-        self._airports:       dict[str, dict] = {}
-        self._currencies:     dict[str, dict] = {}
-        self._countries:      dict[str, dict] = {}
-        self._gbp_rates:      dict[str, float] = {}
+        self._airports:   dict[str, dict] = {}
+        self._currencies: dict[str, dict] = {}
+        self._countries:  dict[str, dict] = {}
+        self._gbp_rates:  dict[str, float] = {}
 
-        # Derived fast-lookup sets
         self._airport_codes:  frozenset = frozenset()
         self._currency_codes: frozenset = frozenset()
         self._country_codes:  frozenset = frozenset()
-        self._non_airport_3:  frozenset = frozenset()  # 3-letter codes that are NOT airports
+        self._non_airport_3:  frozenset = frozenset()
 
-        # City → IATA index (lowercase city name → IATA)
-        self._city_idx:       dict[str, str] = {}
-        # IATA → currency code
-        self._iata_currency:  dict[str, str] = {}
-        # IATA → country code
-        self._iata_country:   dict[str, str] = {}
+        self._city_idx:      dict[str, str] = {}
+        self._iata_currency: dict[str, str] = {}
+        self._iata_country:  dict[str, str] = {}
 
     def build(self) -> "ReferenceCache":
-        """Build all caches from reference_data. Call once at startup."""
         if self._built:
             return self
-
         t0 = time.perf_counter()
         try:
-            from data.reference_data import (
-                AIRPORTS, CURRENCIES, COUNTRIES, GBP_FALLBACK_RATES
-            )
-
-            self._airports   = AIRPORTS
-            self._currencies = CURRENCIES
-            self._countries  = COUNTRIES
-            self._gbp_rates  = GBP_FALLBACK_RATES
-
-            # ── Derived sets ────────────────────────────────────
-            self._airport_codes  = frozenset(AIRPORTS.keys())
-            self._currency_codes = frozenset(CURRENCIES.keys())
-            self._country_codes  = frozenset(COUNTRIES.keys())
-
-            # 3-letter codes that could look like IATA but are not airports
-            # Includes: all currency codes, all country codes (alpha-2 won't clash
-            # with IATA since country codes are only 2 letters, but some abbreviations
-            # like UAE/USA/AED might appear in JSON)
-            self._non_airport_3 = frozenset(
-                code for code in self._currency_codes
-                if len(code) == 3 and code not in self._airport_codes
-            ) | frozenset([
-                # Common 3-letter abbreviations used in itinerary JSON
-                # that are NOT airport codes
-                "UAE","KSA","USA","GBR","CHN","JPN","KOR","AUS","NZL",
-                "IND","PAK","BGD","LKA","THA","IDN","MYS","PHL","VNM",
-                "ZAF","KEN","TZA","ETH","NGA","GHA","MAR","TUN","TUR",
-                "ISR","JOR","LBN","IRN","IRQ","SYR","YEM","FRA","DEU",
-                "ITA","ESP","PRT","GRC","NLD","BEL","CHE","AUT","POL",
-                "CZE","HUN","ROU","BGR","HRV","SRB","MKD","MNE","ALB",
-                # Tech/business abbreviations
-                "API","URL","PDF","CSS","LLM","MCP","RAG","GDS","ETA",
-                "VIP","TBC","TBD","PRO","GDP","VAT","TAX","SLA","ROI",
-                "KPI","CRM","SRC","DST","DEP","ARR","DUR","LEG","PAX",
-                "ADT","CHD","INF","AGT","OPT","MOD","NUM","REF","EST",
-                "AVG","STD","MIN","MAX","GPS","ETD","ETB","MON","TUE",
-                "WED","THU","FRI","SAT","SUN","JAN","FEB","MAR","APR",
-                "JUN","JUL","AUG","SEP","OCT","NOV","DEC","ETA","ETE",
-            ])
-
-            # ── City → IATA index ────────────────────────────────
-            for iata, info in AIRPORTS.items():
-                city = info.get("city", "")
-                if city:
-                    self._city_idx[city.lower()] = iata
-                    # Also index common variations
-                    # "New York" → also index "newyork"
-                    no_space = city.lower().replace(" ", "")
-                    if no_space != city.lower():
-                        self._city_idx[no_space] = iata
-                # Index by airport name keywords
-                name = info.get("name", "")
-                if name:
-                    self._city_idx[name.lower()] = iata
-
-            # ── IATA → currency / country ────────────────────────
-            for iata, info in AIRPORTS.items():
-                cc = info.get("country_code", "")
-                if cc and cc in COUNTRIES:
-                    country = COUNTRIES[cc]
-                    self._iata_country[iata]  = cc
-                    self._iata_currency[iata] = country.get("currency", "")
-
-            # ── Also build city_idx from country main airports ───
-            for cc, info in COUNTRIES.items():
-                name = info.get("name", "").lower()
-                airport = info.get("main_airport", "")
-                if name and airport:
-                    self._city_idx[name] = airport
-
-        except ImportError as e:
-            log.error("ReferenceCache: reference_data.py not found: %s", e)
+            if self._load_from_db():
+                self._source = "database"
+            else:
+                self._load_from_python()
+                self._source = "python_dicts"
+            self._derive_indexes()
         except Exception as e:
-            log.error("ReferenceCache build failed: %s", e, exc_info=e)
+            log.error("ReferenceCache build error: %s", e, exc_info=e)
         finally:
             elapsed = round((time.perf_counter() - t0) * 1000, 1)
             self._built      = True
             self._build_time = elapsed
 
         log.info(
-            "ReferenceCache built in %sms — %d airports, %d currencies, %d countries, %d city aliases",
-            self._build_time,
-            len(self._airports),
-            len(self._currencies),
-            len(self._countries),
-            len(self._city_idx),
+            "ReferenceCache ready in %sms from %s — %d airports %d currencies "
+            "%d countries %d city_aliases",
+            self._build_time, self._source,
+            len(self._airports), len(self._currencies),
+            len(self._countries), len(self._city_idx),
         )
+        print(f"  [RefCache] {len(self._airports)} airports  "
+              f"{len(self._currencies)} currencies  "
+              f"{len(self._countries)} countries  "
+              f"{len(self._city_idx)} city aliases  "
+              f"({self._build_time}ms from {self._source})")
         return self
 
-    # ── Lookup methods ────────────────────────────────────────
+    # ── DB load ───────────────────────────────────────────────
+
+    def _load_from_db(self) -> bool:
+        try:
+            from pathlib import Path
+            db_path = Path(__file__).parent.parent / "data" / "voyageai.db"
+            if not db_path.exists():
+                return False
+            import sqlite3
+            conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
+
+            # Check ref tables exist and have data
+            try:
+                n = conn.execute("SELECT COUNT(*) FROM ref_airports").fetchone()[0]
+            except sqlite3.OperationalError:
+                conn.close()
+                return False
+            if n == 0:
+                conn.close()
+                return False
+
+            # Load airports
+            for row in conn.execute("SELECT * FROM ref_airports"):
+                self._airports[row["iata"]] = {
+                    "name":         row["name"],
+                    "city":         row["city"],
+                    "country_code": row["country_code"],
+                    "lat":          row["lat"],
+                    "lon":          row["lon"],
+                }
+
+            # Load currencies
+            for row in conn.execute("SELECT * FROM ref_currencies"):
+                self._currencies[row["code"]] = {
+                    "name":     row["name"],
+                    "symbol":   row["symbol"],
+                    "decimals": row["decimals"],
+                }
+
+            # Load countries
+            for row in conn.execute("SELECT * FROM ref_countries"):
+                self._countries[row["code"]] = {
+                    "name":         row["name"],
+                    "currency":     row["currency"],
+                    "main_airport": row["main_airport"],
+                }
+
+            # Load city aliases (pre-built in DB)
+            for row in conn.execute("SELECT alias, iata FROM ref_city_iata"):
+                self._city_idx[row["alias"]] = row["iata"]
+
+            # Load GBP rates
+            for row in conn.execute("SELECT currency, rate FROM ref_gbp_rates"):
+                self._gbp_rates[row["currency"]] = row["rate"]
+
+            conn.close()
+            return True
+
+        except Exception as e:
+            log.debug("DB load failed: %s", e)
+            return False
+
+    def _load_from_python(self):
+        from data.reference_data import (
+            AIRPORTS, CURRENCIES, COUNTRIES, GBP_FALLBACK_RATES
+        )
+        self._airports   = dict(AIRPORTS)
+        self._currencies = dict(CURRENCIES)
+        self._countries  = dict(COUNTRIES)
+        self._gbp_rates  = dict(GBP_FALLBACK_RATES)
+
+    def _derive_indexes(self):
+        self._airport_codes  = frozenset(self._airports)
+        self._currency_codes = frozenset(self._currencies)
+        self._country_codes  = frozenset(self._countries)
+        self._non_airport_3  = _NEVER_AIRPORT | (self._currency_codes - self._airport_codes)
+
+        # City index (only if not already loaded from DB)
+        if not self._city_idx:
+            for iata, info in self._airports.items():
+                city = info.get("city","")
+                if city:
+                    self._city_idx[city.lower()] = iata
+                    nospace = city.lower().replace(" ","")
+                    if nospace != city.lower():
+                        self._city_idx[nospace] = iata
+            for cc, info in self._countries.items():
+                name    = info.get("name","").lower()
+                airport = info.get("main_airport","")
+                if name and airport:
+                    self._city_idx[name] = airport
+
+        # IATA → currency / country
+        for iata, info in self._airports.items():
+            cc = info.get("country_code","")
+            if cc and cc in self._countries:
+                self._iata_country[iata]  = cc
+                self._iata_currency[iata] = self._countries[cc].get("currency","")
+
+    # ── Public API ────────────────────────────────────────────
 
     def airport(self, iata: str) -> Optional[dict]:
         return self._airports.get(iata.upper())
@@ -177,14 +237,10 @@ class ReferenceCache:
         return code.upper() in self._country_codes
 
     def is_non_airport(self, code: str) -> bool:
-        """True if this 3-letter code is a currency, country-name abbreviation or
-        known abbreviation — i.e. should NOT be validated as an IATA airport code."""
         return code.upper() in self._non_airport_3
 
     def should_validate_as_iata(self, code: str) -> bool:
-        """True only if this code could plausibly be an IATA airport code."""
         c = code.upper()
-        # Must be 3 alphabetic chars, not a known non-airport code
         return (len(c) == 3 and c.isalpha()
                 and c not in self._non_airport_3
                 and c not in self._currency_codes)
@@ -207,23 +263,18 @@ class ReferenceCache:
     def all_currency_codes(self) -> frozenset:
         return self._currency_codes
 
-    def all_country_codes(self) -> frozenset:
-        return self._country_codes
-
-    def all_non_airport_3char(self) -> frozenset:
-        return self._non_airport_3
-
     def stats(self) -> dict:
         return {
-            "built":           self._built,
-            "build_ms":        self._build_time,
-            "airports":        len(self._airports),
-            "currencies":      len(self._currencies),
-            "countries":       len(self._countries),
-            "city_aliases":    len(self._city_idx),
-            "non_airport_3":   len(self._non_airport_3),
+            "built":         self._built,
+            "source":        self._source,
+            "build_ms":      self._build_time,
+            "airports":      len(self._airports),
+            "currencies":    len(self._currencies),
+            "countries":     len(self._countries),
+            "city_aliases":  len(self._city_idx),
+            "non_airport_3": len(self._non_airport_3),
         }
 
 
-# ── Module-level singleton ────────────────────────────────────
+# Module-level singleton
 ref = ReferenceCache()
