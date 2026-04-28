@@ -63,3 +63,40 @@ export function stopGdsTimer() {
   clearInterval(_state.gdsInterval);
   _state.gdsInterval = null;
 }
+
+// ── localStorage persistence ─────────────────────────────────
+// sessionStorage cleared on tab close (security)
+// localStorage persists across refreshes for same-day context
+
+const LS_KEY = 'voyage_session_context';
+
+export function saveContextToLocalStorage() {
+  try {
+    const snap = {
+      sessionId:        _state.sessionId,
+      savedAt:          Date.now(),
+      gdsStartTime:     _state.gdsStartTime,
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(snap));
+  } catch { /* storage may be blocked */ }
+}
+
+export function loadContextFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    // Only restore if within last 30 minutes
+    if (Date.now() - snap.savedAt > 30 * 60 * 1000) {
+      localStorage.removeItem(LS_KEY);
+      return null;
+    }
+    return snap;
+  } catch {
+    return null;
+  }
+}
+
+export function clearLocalStorage() {
+  try { localStorage.removeItem(LS_KEY); } catch {}
+}

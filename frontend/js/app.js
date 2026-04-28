@@ -18,6 +18,8 @@ import { initOrigin, getOriginIata,
 import { $, setText, autoResize, show,
          hide, setHTML }                   from './utils/dom.js';
 import { tierIcon, destIcon }              from './utils/format.js';
+import { saveContextToLocalStorage, loadContextFromLocalStorage,
+         clearLocalStorage }             from './state.js';
 import { toggleAncillary as _toggleAnc,
          getAncillaryTotal }               from './state.js';
 import { buildRecommendationPrompt,
@@ -34,6 +36,7 @@ function getAuth() {
 
 function redirectToLogin() {
   sessionStorage.removeItem('voyage_auth');
+  clearLocalStorage();
   window.location.href = '/login';
 }
 
@@ -48,6 +51,7 @@ async function init() {
 
   // Store in state
   state.setSessionId(auth.session_id);
+  saveContextToLocalStorage();
   state.setCurrentCustomer({
     profile: {
       id:                  auth.customer_id,
@@ -316,32 +320,89 @@ async function send() {
 async function _handleResponse(data) {
   if (!data) { appendAI('⚠️ Empty response.'); return; }
 
-  switch (data.status) {
-    case 'rejected':
-      appendAI(`🛡️ <strong style="color:var(--amber)">Blocked:</strong> ${data.message || data.reason}`);
-      break;
-    case 'session_expired':
-      state.setSessionId(data.session_id);
-      stopTimer();
-      appendAI(`⏱️ ${data.message}`);
-      break;
-    case 'human_handoff':
-      appendAI(`🤝 <strong style="color:var(--amber)">Connecting to a specialist</strong><br>${data.message}`);
-      break;
-    default: {
-      const out  = data.llm_output  || {};
-      const conf = data.confidence  || {};
-      const ac   = data.action_check || {};
-      const meta = { p: data.llm_provider || 'demo', m: data.llm_model || '',
-                     ms: data.elapsed_ms || 0, cost: data.llm_cost_usd || 0 };
-      if (out.intent && out.recommendations) {
-        await renderItineraryCard(out, conf, ac, meta, data);
-      } else if (out.summary) {
-        appendAI(out.summary);
-      } else {
-        appendAI('<em>No itinerary found — try rephrasing.</em>');
-      }
-    }
+  const state_val = data.conversation_state || data.status;
+
+  // ── Clarification question ────────────────────────────────
+  if (data.status === 'clarifying') {
+    const modType = data.modification_type || '';
+    const icon    = { dates:'📅', guests:'👥', hotel:'🏨', flight:'✈️', budget:'💷' }[modType] || '✏️';
+    appendAI(`${icon} <strong>${data.message}</strong>`);
+    return;
+  }
+
+  // ── Plan cancelled ────────────────────────────────────────
+  if (data.status === 'cancelled') {
+    appendAI(`🗑️ <strong style="color:var(--amber)">Plan cancelled.</strong><br>
+      <span style="color:var(--muted)">Where would you like to go?</span>`);
+    return;
+  }
+
+  // ── Plan confirmed ────────────────────────────────────────
+  if (data.status === 'confirmed') {
+    appendAI(`🎉 <strong style="color:var(--teal)">Booking Confirmed!</strong><br>
+      Reference: VGI-${state.getSessionId().toUpperCase()}<br>
+      <span style="color:var(--muted)">You'll receive a confirmation email shortly.</span>`);
+    stopTimer();
+    return;
+  }
+
+  // ── Rejected ──────────────────────────────────────────────
+  if (data.status === 'rejected') {
+    appendAI(`🛡️ <strong style="color:var(--amber)">Blocked:</strong> ${data.message || data.reason}`);
+    return;
+  }
+
+  // ── Session expired ───────────────────────────────────────
+  if (data.status === 'session_expired') {
+    state.setSessionId(data.session_id);
+    stopTimer();
+    appendAI(`⏱️ ${data.message}`);
+    return;
+  }
+
+  // ── Human handoff ─────────────────────────────────────────
+  if (data.status === 'human_handoff') {
+    appendAI(`🤝 <strong style="color:var(--amber)">Connecting to a specialist</strong><br>
+      <span style="color:var(--muted)">${data.message || 'AI could not complete this with sufficient confidence.'}</span><br><br>
+      💡 <em style="color:var(--dim)">Tip: Try being more specific — e.g. "Seychelles for 4 people, 2 weeks in October, £5000 budget"</em>`);
+    return;
+  }
+
+  // ── Modification result ───────────────────────────────────
+  if (data.is_modification && data.llm_output) {
+    const out  = data.llm_output;
+    const conf = data.confidence || { overall: 0.88, passed: true };
+    const ac   = { passed: true, action: 'proceed' };
+    const meta = { p: 'conversation_engine', m: '', ms: 0, cost: 0 };
+
+    // Show modification banner
+    const modType = data.modification_type || 'plan';
+    const modLabel = {
+      dates:'Dates Updated', guests:'Guests Updated', hotel:'Hotel Updated',
+      flight:'Flight Updated', budget:'Budget Updated', destination:'Destination Updated'
+    }[modType] || 'Plan Updated';
+
+    appendAI(`✏️ <strong style="color:var(--teal)">${modLabel}</strong> — 
+      <span style="color:var(--muted)">Refreshed with new ${modType} below</span>`);
+
+    await renderItineraryCard(out, conf, ac, meta, data);
+    return;
+  }
+
+  // ── Normal itinerary ──────────────────────────────────────
+  const out  = data.llm_output  || {};
+  const conf = data.confidence  || {};
+  const ac   = data.action_check || {};
+  const meta = { p: data.llm_provider || 'demo', m: data.llm_model || '',
+                 ms: data.elapsed_ms || 0, cost: data.llm_cost_usd || 0 };
+
+  if (out.intent && out.recommendations) {
+    await renderItineraryCard(out, conf, ac, meta, data);
+  } else if (out.summary) {
+    appendAI(out.summary);
+  } else {
+    appendAI('<em style="color:var(--muted)">No itinerary found — try being more specific:</em><br>' +
+             '<em style="color:var(--dim)">e.g. "Seychelles 4 people 2 weeks October £4000"</em>');
   }
 }
 
@@ -383,6 +444,7 @@ function toggleAncillary(id, name, price) {
 
 function _setLoading(on) {
   state.setLoading(on);
+  if (on) saveContextToLocalStorage();
   const btn = $('#sendBtn');
   if (btn) btn.disabled = on;
   setText('#statusText', on ? 'Reasoning…' : 'Ready');

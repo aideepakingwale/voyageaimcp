@@ -1,50 +1,28 @@
-"""Chat and demo endpoints — main reasoning pipeline."""
-import time
-from flask import Blueprint, request, jsonify
-from config import Config
-from rag.memory_store import memory_store
-from reasoning.engine import ReasoningEngine
+"""
+VoyageAI Chat API — Conversational State Machine with full pipeline re-run.
+Context persisted to SQLite + in-memory RAG.
+"""
+import json
+from flask              import Blueprint, request, jsonify
+from rag.memory_store   import memory_store
+from reasoning.engine   import ReasoningEngine
+from reasoning.conversation_engine import (
+    classify_intent, apply_modification,
+)
+from data.conversation_store import (
+    upsert_conversation, save_turn, save_itinerary_version,
+    get_latest_itinerary, restore_session_to_memory,
+    update_entities, get_itinerary_history,
+)
+from core.logging_config import get_logger
+from core.trace          import set_trace_id, new_trace_id, get_trace_id
 
-bp     = Blueprint("chat", __name__)
-
-def _format_visa(d: dict) -> str:
-    """Format AI visa data into a concise advisory string."""
-    if not d:
-        return "Verify entry requirements with destination embassy."
-    required  = d.get("visa_required")
-    entry     = d.get("entry_type","")
-    stay      = d.get("max_stay_days")
-    cost      = d.get("cost","")
-    
-    parts = []
-    if required is False or entry == "visa_free":
-        parts.append("✅ No visa required")
-    elif entry == "eta_required":
-        parts.append(f"⚡ ETA required ({cost or 'small fee'})")
-    elif entry == "evisa_required":
-        parts.append(f"💻 eVisa required ({cost or 'fee applies'})")
-    elif entry == "visa_on_arrival":
-        parts.append(f"✈️ Visa on arrival ({cost or 'fee at airport'})")
-    elif entry == "embassy_visa":
-        parts.append("🏛️ Embassy visa required — apply in advance")
-    else:
-        parts.append("⚠️ Check entry requirements")
-    
-    if stay:
-        parts.append(f"up to {stay} days")
-    
-    pv = d.get("passport_validity","")
-    if pv:
-        parts.append(pv)
-        
-    return ". ".join(parts) + "."
+bp  = Blueprint("chat", __name__)
+log = get_logger("app")
+_engine = None
 
 
-_engine: ReasoningEngine | None = None
-
-
-def get_engine() -> ReasoningEngine:
-    """Lazy singleton — avoids slow imports at module load time."""
+def _get_engine():
     global _engine
     if _engine is None:
         _engine = ReasoningEngine()
@@ -53,134 +31,287 @@ def get_engine() -> ReasoningEngine:
 
 @bp.route("/chat", methods=["POST"])
 def chat():
-    """
-    Main reasoning endpoint.
-    Accepts: { message, session_id, customer_context? }
-    Returns: full itinerary with confidence scores, MCP data, provider info.
-    """
-    body    = request.get_json(silent=True) or {}
-    message = (body.get("message") or "").strip()
-    sid     = body.get("session_id") or ""
-    ctx     = body.get("customer_context")        # optional enrichment
+    data        = request.get_json(silent=True) or {}
+    if get_trace_id() == "NO-TRACE":
+        set_trace_id(new_trace_id())
+
+    message     = (data.get("message") or "").strip()
+    session_id  = (data.get("session_id") or "").strip()
+    origin_iata = (data.get("origin_iata") or "").strip().upper() or None
+    ctx         = data.get("customer_context") or {}
 
     if not message:
         return jsonify({"error": "message is required"}), 400
 
-    # Create or validate session
-    if not sid or not memory_store.get_session(sid):
-        sid = memory_store.create_session()
+    # Ensure session exists
+    if not session_id or not memory_store.get_session(session_id):
+        if not session_id:
+            session_id = memory_store.create_session()
+        else:
+            memory_store._sessions.setdefault(session_id, {
+                "created_at": 0, "last_active": 0,
+                "entities": {}, "history": [], "confirmed": {},
+                "last_itinerary": None,
+            })
+            restore_session_to_memory(session_id)
 
-    # GDS session window check
-    age = memory_store.session_age_seconds(sid)
-    if age > Config.GDS_SESSION_TIMEOUT:
-        new_sid = memory_store.create_session()
-        return jsonify({
-            "session_id": new_sid,
-            "status":     "session_expired",
-            "message":    "GDS session expired (10-min window). Starting fresh — preferences saved.",
-        })
+    # Persist to DB
+    upsert_conversation(
+        session_id,
+        ctx.get("id") or ctx.get("customer_id"),
+        ctx.get("name") or ctx.get("customer_name"),
+        origin_iata
+    )
 
-    # Enrich session with customer context if provided
+    if origin_iata and len(origin_iata) == 3:
+        memory_store.store_entity(session_id, "origin_iata", origin_iata, 0.99)
+
     if ctx:
-        for key, val in ctx.items():
-            if val:
-                memory_store.store_entity(sid, key, val, confidence=1.0)
+        for key in ("travel_style", "loyalty_tier", "adults", "children"):
+            if ctx.get(key) is not None:
+                memory_store.store_entity(session_id, key, ctx[key], 0.95)
 
-    # Store detected/user origin airport in session
-    origin = (body.get("origin_iata") or "").strip().upper() or None
-    if origin and len(origin) == 3:
-        memory_store.store_entity(sid, "origin_iata", origin, confidence=1.0)
-    elif not memory_store.retrieve_entity(sid, "origin_iata"):
-        # Detect from request IP if not already known
-        from core.geo_location import locate_ip
-        ip  = (request.headers.get("X-Forwarded-For","").split(",")[0].strip()
-                or request.remote_addr or "")
-        geo = locate_ip(ip)
-        if geo and geo.get("iata"):
-            memory_store.store_entity(sid, "detected_origin_iata", geo["iata"], confidence=0.85)
-            memory_store.store_entity(sid, "detected_origin_city", geo["city"], confidence=0.85)
+    # Save user turn
+    memory_store.add_turn(session_id, "user", message)
+    save_turn(session_id, "user", message)
+    update_entities(session_id, memory_store.retrieve_all_entities(session_id))
 
-    t0     = time.time()
-    result = get_engine().reason(message, sid)
-    elapsed = round((time.time() - t0) * 1000)
+    # Load last itinerary (memory first, then DB)
+    last_itinerary = memory_store.get_last_itinerary(session_id)
+    if not last_itinerary:
+        last_itinerary = get_latest_itinerary(session_id)
+        if last_itinerary:
+            memory_store.store_itinerary(session_id, last_itinerary)
 
-    return jsonify({
-        **result,
-        "elapsed_ms":             elapsed,
-        "gds_window_remaining_s": max(0, Config.GDS_SESSION_TIMEOUT - age),
+    # Classify intent
+    intent = classify_intent(message, bool(last_itinerary))
+    log.info("Intent classified", extra={
+        "session": session_id, "type": intent["type"],
+        "subtype": intent.get("subtype"), "has_plan": bool(last_itinerary),
     })
+
+    # Check if answering a clarification
+    pending = memory_store.retrieve_entity(session_id, "pending_modification")
+    if pending and intent["type"] == "plan":
+        intent = _resolve_clarification(pending, message)
+        memory_store.store_entity(session_id, "pending_modification", None, 0)
+
+    # ── CANCEL ──────────────────────────────────────────
+    if intent["type"] == "cancel":
+        s = memory_store.get_session(session_id)
+        if s:
+            s["last_itinerary"] = None
+        msg = "Plan cancelled. Where would you like to go next?"
+        memory_store.add_turn(session_id, "assistant", msg)
+        save_turn(session_id, "assistant", msg, "cancel")
+        return jsonify({"session_id": session_id, "status": "cancelled",
+                        "message": msg, "conversation_state": "idle"})
+
+    # ── CONFIRM ─────────────────────────────────────────
+    if intent["type"] == "confirm" and last_itinerary:
+        ver = save_itinerary_version(session_id, last_itinerary, message,
+                                     "confirmed", 0.99, "user_confirmed")
+        msg = "Booking confirmed! Reference: VGI-" + session_id.upper()
+        memory_store.add_turn(session_id, "assistant", msg)
+        save_turn(session_id, "assistant", msg, "confirm")
+        return jsonify({"session_id": session_id, "status": "confirmed",
+                        "llm_output": last_itinerary,
+                        "confidence": {"overall": 0.99, "passed": True},
+                        "message": msg, "itinerary_version": ver,
+                        "conversation_state": "confirmed"})
+
+    # ── CLARIFY ─────────────────────────────────────────
+    if intent["type"] == "modify" and intent.get("needs_clarification"):
+        q = intent["clarify_question"]
+        memory_store.store_entity(session_id, "pending_modification",
+                                   intent.get("subtype"), 0.99)
+        memory_store.add_turn(session_id, "assistant", q)
+        save_turn(session_id, "assistant", q, "clarify", intent.get("subtype"))
+        return jsonify({"session_id": session_id, "status": "clarifying",
+                        "message": q, "modification_type": intent.get("subtype"),
+                        "conversation_state": "clarifying"})
+
+    # ── MODIFY — full pipeline re-run ────────────────────
+    if intent["type"] == "modify" and last_itinerary:
+        return _run_modification(session_id, message, intent,
+                                  last_itinerary, origin_iata, ctx)
+
+    # ── PLAN — fresh request ─────────────────────────────
+    return _run_plan(session_id, message, origin_iata, ctx)
+
+
+def _run_plan(session_id, message, origin_iata, ctx):
+    result = _get_engine().reason(message, session_id)
+    result["session_id"] = session_id
+    result["conversation_state"] = "planning"
+    result["is_modification"] = False
+
+    if result.get("status") in ("ready", "awaiting_confirmation"):
+        llm_out = result.get("llm_output", {})
+        ver = save_itinerary_version(
+            session_id, llm_out, message, None,
+            result.get("confidence", {}).get("overall", 0),
+            result.get("llm_provider", "template")
+        )
+        result["itinerary_version"] = ver
+        memory_store.add_turn(session_id, "assistant",
+                               llm_out.get("summary", "Plan ready."))
+        save_turn(session_id, "assistant",
+                  llm_out.get("summary", "Plan ready."), "plan")
+        update_entities(session_id, memory_store.retrieve_all_entities(session_id))
+
+    return jsonify(result)
+
+
+def _run_modification(session_id, message, intent, last_itinerary, origin_iata, ctx):
+    """Apply modification + full ReasoningEngine re-run."""
+    subtype   = intent.get("subtype", "")
+    extracted = intent.get("extracted", {})
+
+    # Patch the stored itinerary intent block
+    patched = apply_modification(session_id, intent) or last_itinerary
+
+    # Update session entities
+    if extracted.get("departure_date"):
+        memory_store.store_entity(session_id, "departure_date",
+                                   extracted["departure_date"], 0.99)
+    if extracted.get("nights"):
+        memory_store.store_entity(session_id, "nights",
+                                   extracted["nights"], 0.99)
+    if extracted.get("guests"):
+        memory_store.store_entity(session_id, "guests",
+                                   extracted["guests"], 0.99)
+    if extracted.get("budget_gbp"):
+        memory_store.store_entity(session_id, "budget_gbp",
+                                   extracted["budget_gbp"], 0.99)
+    if extracted.get("min_stars"):
+        memory_store.store_entity(session_id, "min_hotel_stars",
+                                   extracted["min_stars"], 0.99)
+
+    # Build complete prompt from patched intent
+    rebuilt = _build_prompt(patched, subtype)
+    log.info("Modification re-run", extra={
+        "session": session_id, "subtype": subtype, "prompt": rebuilt[:100]
+    })
+
+    # Full ReasoningEngine re-run
+    result = _get_engine().reason(rebuilt, session_id)
+    result["session_id"]       = session_id
+    result["is_modification"]  = True
+    result["modification_type"] = subtype
+    result["conversation_state"] = "modified"
+
+    llm_out = result.get("llm_output") or patched
+    conf    = result.get("confidence", {}).get("overall", 0.80)
+    prov    = result.get("llm_provider", "template")
+
+    if result.get("status") not in ("ready", "awaiting_confirmation"):
+        # Engine failed — use patched plan
+        result["status"]     = "awaiting_confirmation"
+        result["llm_output"] = patched
+        llm_out = patched
+        conf = 0.80
+        prov = "conversation_fallback"
+
+    # Build change summary and inject into output
+    summary = _change_summary(subtype, extracted, llm_out)
+    llm_out["summary"] = summary
+    llm_out["is_modification"] = True
+    llm_out["modification_type"] = subtype
+
+    ver = save_itinerary_version(session_id, llm_out, message, subtype, conf, prov)
+    result["itinerary_version"] = ver
+    result["version_history"] = get_itinerary_history(session_id)[-5:]
+
+    memory_store.store_itinerary(session_id, llm_out)
+    memory_store.add_turn(session_id, "assistant", summary)
+    save_turn(session_id, "assistant", summary, "modify", subtype)
+    update_entities(session_id, memory_store.retrieve_all_entities(session_id))
+
+    return jsonify(result)
+
+
+def _build_prompt(patched, subtype):
+    """Build a complete natural language prompt from the patched itinerary."""
+    intent = patched.get("intent", {})
+    dates  = intent.get("dates", {})
+    prefs  = intent.get("preferences", {})
+
+    dest     = intent.get("destination", "")
+    code     = intent.get("city_code", "")
+    guests   = intent.get("guests", 2)
+    adults   = intent.get("adults", guests)
+    children = intent.get("children", 0)
+    budget   = intent.get("budget_gbp", 3000)
+    dep      = dates.get("departure_date", "")
+    nights   = dates.get("nights", 7)
+    stars    = prefs.get("min_hotel_stars", 4)
+    direct   = prefs.get("direct_flight", False)
+    pool     = prefs.get("pool", False)
+    cabin    = prefs.get("cabin_class", "ECONOMY")
+
+    guests_str = (f"{adults} adults and {children} children"
+                  if children else f"{adults} adults")
+    parts = [f"Plan a trip to {dest} ({code}) for {guests_str}."]
+    if dep:   parts.append(f"Departure: {dep}. Duration: {nights} nights.")
+    parts.append(f"Budget: GBP {budget}.")
+    hotel_desc = f"{stars}-star hotel"
+    if pool:  hotel_desc += " with pool"
+    parts.append(f"Hotel: {hotel_desc}.")
+    if direct: parts.append("Direct flights only.")
+    if cabin != "ECONOMY": parts.append(f"Cabin class: {cabin}.")
+    parts.append(f"[MODIFICATION TYPE: {subtype}]")
+    parts.append("Provide updated flights, hotels, experiences and full cost breakdown.")
+    return " ".join(parts)
+
+
+def _change_summary(subtype, extracted, result):
+    intent = result.get("intent", {})
+    dates  = intent.get("dates", {})
+    dest   = intent.get("destination", "your destination")
+    total  = result.get("total_cost_gbp", 0)
+    nights = dates.get("nights", 0)
+    guests = intent.get("guests", 2)
+    dep    = dates.get("departure_date", "")
+    ret    = dates.get("return_date", "")
+
+    msgs = {
+        "dates":       f"Dates updated to {dep} - {ret} ({nights} nights). Total: GBP {total:,.0f}",
+        "guests":      f"Guest count updated to {guests}. Total: GBP {total:,.0f}",
+        "hotel":       f"Hotel preference updated. Total: GBP {total:,.0f}",
+        "flight":      f"Flight preference updated. Total: GBP {total:,.0f}",
+        "budget":      f"Budget updated. Plan adjusted. Total: GBP {total:,.0f}",
+        "destination": f"Destination changed to {dest}. Total: GBP {total:,.0f}",
+    }
+    return msgs.get(subtype, f"Plan updated. Total: GBP {total:,.0f}")
+
+
+def _resolve_clarification(pending_mod, message):
+    from reasoning.conversation_engine import (
+        _extract_dates_from_text, _extract_guest_count, _extract_budget)
+    extracted = {}
+    if pending_mod == "dates":
+        extracted = _extract_dates_from_text(message)
+    elif pending_mod == "guests":
+        extracted = _extract_guest_count(message)
+    elif pending_mod == "budget":
+        b = _extract_budget(message)
+        if b:
+            extracted = {"budget_gbp": b}
+    return {"type": "modify", "subtype": pending_mod, "extracted": extracted,
+            "needs_clarification": not bool(extracted),
+            "clarify_question": f"Could you be more specific about the {pending_mod}?"}
 
 
 @bp.route("/demo", methods=["POST"])
 def demo():
-    """
-    Demo mode — uses MCP data but bypasses LLM (template provider only).
-    Useful for demos without any API keys.
-    """
-    body    = request.get_json(silent=True) or {}
-    message = body.get("message", "")
-    sid     = body.get("session_id") or memory_store.create_session()
+    return chat()
 
-    memory_store.add_turn(sid, "user", message)
 
-    from mcp_servers import MCP_REGISTRY
-    flights  = MCP_REGISTRY["flights"].call({"origin":"LHR","destination":"LIS","date":"2025-10-01","adults":4})
-    hotels   = MCP_REGISTRY["hotels"].call({"city":"LIS","check_in":"2025-10-01","check_out":"2025-10-08",
-                                             "guests":4,"pool":True,"family_rooms":True})
-    weather  = MCP_REGISTRY["weather"].call({"city":"LIS","month":10})
-    currency = MCP_REGISTRY["currency"].call({"base":"GBP","target":"EUR","amount":3000})
-    visa     = MCP_REGISTRY["visa"].call({"passport_country":"GB","destination_country":"PT"})
-    maps     = MCP_REGISTRY["maps"].call({"origin":"LIS_AIRPORT","destination":"CHIADO"})
-    exp      = MCP_REGISTRY["experiences"].call({"city":"LIS","guests":4,"interests":["family","culture"]})
-    cars     = MCP_REGISTRY["cars"].call({"airport":"LIS","guests":4,"days":7})
-
-    bf    = (flights["data"]["flights"] or [{}])[0]
-    bh    = (hotels["data"]["hotels"]   or [{}])[0]
-    exps  = (exp["data"]["experiences"] or [])[:3]
-    fc, hc = bf.get("price_gbp",568), bh.get("total_price_gbp",1365)
-    ec    = sum(e.get("total_gbp",0) for e in exps[:2])
-    total = round(fc + hc + 65 + ec, 2)
-    conf  = {"intent":0.94,"rag":0.88,"gds":0.91,"hallucination":0.92,"overall":0.91}
-
-    result = {
-        "session_id":   sid,
-        "status":       "awaiting_confirmation",
-        "llm_provider": "demo",
-        "llm_model":    "mock-v1",
-        "llm_cost_usd": 0.0,
-        "confidence":   conf,
-        "llm_output": {
-            "intent": {
-                "destination":"Lisbon","city_code":"LIS","country_code":"PT",
-                "dates":{"departure_date":"2025-10-01","return_date":"2025-10-08","nights":7,"flexible":False},
-                "guests":4,"adults":2,"children":2,"budget_gbp":3000,
-                "preferences":{"direct_flight":True,"pool":True,"family_rooms":True,"min_hotel_stars":4},
-            },
-            "destinations":["Lisbon"],
-            "summary":f"7-night family trip to Lisbon for 4 guests. Direct flights from LHR, 4★ pool hotel. Total: £{total:.0f}",
-            "recommendations":{
-                "flights":[bf],"hotels":[bh],
-                "transfers":(cars["data"]["options"] or [{}])[:1],
-                "experiences":exps,
-                "weather_advisory":weather["data"].get("desc","Mild and pleasant in October."),
-                "visa_advisory":    _format_visa(visa.get("data",{})),
-                "visa_full":        visa.get("data",{}),
-                "currency_tip":f"£1 = €{currency['data'].get('rate',1.17):.2f}",
-                "airport_transfer":maps["data"],
-            },
-            "total_cost_gbp":total,"confidence_scores":conf,
-            "reasoning":"Demo mode — template itinerary built from live MCP data.",
-        },
-        "mcp_data":{"flights":flights,"hotels":hotels,"weather":weather,
-                    "currency":currency,"visa":visa,"maps":maps,"experiences":exp,"cars":cars},
-        "action_check":{"passed":False,"action":"human_confirm",
-                        "reason":f"High-value booking £{total:.0f} requires confirmation",
-                        "data":{"amount":total}},
-        "elapsed_ms":320,
-    }
-    memory_store.add_turn(sid, "assistant", result["llm_output"]["summary"])
-    # Add modification flag to response
-    result["is_modification"] = memory_store.is_modification_request(message) and bool(
-        memory_store.get_last_itinerary(session_id)
-    )
-    return jsonify(result)
+@bp.route("/history/<session_id>", methods=["GET"])
+def get_history(session_id):
+    return jsonify({
+        "session_id": session_id,
+        "itinerary_history": get_itinerary_history(session_id),
+        "conversation_turns": [],
+    })
