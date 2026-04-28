@@ -114,7 +114,16 @@ def resolve_location():
             "source":     "country_lookup",
         })
 
-    # 5. LLM-powered resolution for unusual city names
+    # 5. Amadeus Airport Search for unusual city names
+    try:
+        from mcp_servers.iata_resolver import resolve_to_iata
+        result = resolve_to_iata(text)
+        if result.get("iata"):
+            return jsonify({**result, "source": result.get("source","amadeus")})
+    except Exception:
+        pass
+
+    # 6. LLM-powered resolution as last resort
     llm_result = _llm_resolve(text)
     if llm_result:
         return jsonify({**llm_result, "source": "llm_resolved"})
@@ -131,21 +140,27 @@ def resolve_location():
 @bp.route("/locate/airports", methods=["GET"])
 def search_airports():
     """
-    Autocomplete airport search by city name prefix.
-    Query param: q=man   →  [{"city":"Manchester","iata":"MAN"}, ...]
+    Autocomplete airport search — tries Amadeus first, then local dict.
+    Query param: q=man  →  [{"city":"Manchester","iata":"MAN","country":"UK"}, ...]
     """
-    q = (request.args.get("q") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
     if len(q) < 2:
         return jsonify({"results": []})
-
-    results = [
-        {"city": city.title(), "iata": code,
-         "display": f"{city.title()} ({code})"}
-        for city, code in CITY_TO_AIRPORT.items()
-        if q in city
-    ]
-    results.sort(key=lambda x: (not x["city"].lower().startswith(q), x["city"]))
-    return jsonify({"results": results[:10]})
+    try:
+        from mcp_servers.iata_resolver import search_airports as _search
+        results = _search(q, limit=10)
+        return jsonify({"results": results})
+    except Exception as e:
+        log.debug("Airport search error: %s", e)
+        # Fallback to local dict
+        q_l = q.lower()
+        results = [
+            {"city": city.title(), "iata": code,
+             "display": f"{city.title()} ({code})", "country": ""}
+            for city, code in CITY_TO_AIRPORT.items()
+            if q_l in city
+        ][:10]
+        return jsonify({"results": results})
 
 
 def _llm_resolve(text: str) -> dict | None:
