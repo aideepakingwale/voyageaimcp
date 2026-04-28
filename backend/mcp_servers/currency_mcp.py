@@ -87,9 +87,16 @@ class CurrencyMCP(BaseMCP):
         amount = float(params.get("amount", 1000))
         dest   = params.get("destination_iata","")
 
-        # Auto-detect target currency from destination
-        if dest and dest.upper() in DEST_CURRENCIES:
-            target = DEST_CURRENCIES[dest.upper()]
+        # Auto-detect target currency from destination using ReferenceCache
+        if dest:
+            try:
+                from core.reference_cache import ref
+                detected = ref.iata_to_currency(dest.upper())
+                if detected:
+                    target = detected
+            except Exception:
+                if dest.upper() in DEST_CURRENCIES:
+                    target = DEST_CURRENCIES[dest.upper()]
 
         api_key = os.getenv("EXCHANGERATE_API_KEY","").strip()
 
@@ -133,23 +140,38 @@ class CurrencyMCP(BaseMCP):
         return None
 
     def _fallback(self, base, target, amount):
-        # Chain rates via GBP
+        # Use ReferenceCache rates (from reference_data.py GBP_FALLBACK_RATES)
+        try:
+            from core.reference_cache import ref
+            def _rate(code): return ref.gbp_rate(code) if code != "GBP" else 1.0
+        except Exception:
+            def _rate(code): return FALLBACK_GBP.get(code, 1.0)
+
         if base == "GBP":
-            rate = FALLBACK_GBP.get(target, 1.0)
+            rate = _rate(target)
         elif target == "GBP":
-            rate = 1.0 / FALLBACK_GBP.get(base, 1.0)
+            rate = 1.0 / max(_rate(base), 0.00001)
         else:
-            gbp_to_base   = FALLBACK_GBP.get(base, 1.0)
-            gbp_to_target = FALLBACK_GBP.get(target, 1.0)
-            rate = gbp_to_target / gbp_to_base
+            gbp_to_base   = _rate(base)
+            gbp_to_target = _rate(target)
+            rate = gbp_to_target / max(gbp_to_base, 0.00001)
 
         # Daily variation ±0.5%
         seed = hash(str(time.gmtime().tm_yday)) % 100
         rate = round(rate * (1 + (seed-50)/10000), 4)
         conv = round(amount * rate, 2)
 
-        t_name, t_sym = CURRENCY_INFO.get(target, (target,""))
-        b_name, b_sym = CURRENCY_INFO.get(base,   (base,""))
+        try:
+            from core.reference_cache import ref
+            t_info = ref.currency(target) or {}
+            b_info = ref.currency(base) or {}
+            t_name = t_info.get("name", target)
+            t_sym  = t_info.get("symbol", "")
+            b_name = b_info.get("name", base)
+            b_sym  = b_info.get("symbol", "")
+        except Exception:
+            t_name, t_sym = CURRENCY_INFO.get(target, (target,""))
+            b_name, b_sym = CURRENCY_INFO.get(base,   (base,""))
         return {"data":{
             "base":b_name,"base_symbol":b_sym,"target":target,
             "target_name":t_name,"target_symbol":t_sym,

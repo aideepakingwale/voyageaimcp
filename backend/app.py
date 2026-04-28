@@ -9,6 +9,10 @@ def create_app(config_class=Config) -> Flask:
     from core import init_logging, register_request_logging
     init_logging()
 
+    # Build reference cache from data/reference_data.py (once at startup)
+    from core.reference_cache import ref as _ref
+    _ref.build()
+
     app = Flask(__name__)
     app.config.from_object(config_class)
     CORS(app, origins=config_class.CORS_ORIGINS)

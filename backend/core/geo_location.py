@@ -136,6 +136,15 @@ COUNTRY_CODE_TO_AIRPORT = {
 
 def city_to_iata(text: str) -> str | None:
     key = text.lower().strip()
+    # Try ReferenceCache first (populated from reference_data.py)
+    try:
+        from core.reference_cache import ref
+        result = ref.city_to_iata(key)
+        if result:
+            return result
+    except Exception:
+        pass
+    # Fallback to local dict
     return CITY_TO_AIRPORT.get(key) or COUNTRY_TO_AIRPORT.get(key)
 
 
@@ -144,6 +153,7 @@ def iata_for_location(text: str) -> str | None:
     if result:
         return result
     text_l = text.lower().strip()
+    # Partial match in local dict
     for city, code in CITY_TO_AIRPORT.items():
         if text_l in city or city in text_l:
             return code

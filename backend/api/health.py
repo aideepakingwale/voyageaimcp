@@ -28,3 +28,28 @@ def waterfall_status():
     """LLM provider waterfall stats — calls, success rate, latency, cost."""
     from llm import get_waterfall
     return jsonify(get_waterfall().get_status())
+
+
+@bp.route("/reference", methods=["GET"])
+def reference_stats():
+    """Inspect the startup reference cache."""
+    try:
+        from core.reference_cache import ref
+        q    = request.args.get("q","").strip().upper()
+        stats = ref.stats()
+        if q:
+            return jsonify({
+                "query":      q,
+                "is_airport": ref.is_airport(q),
+                "is_currency":ref.is_currency(q),
+                "is_country_code": ref.is_country_code(q),
+                "is_non_airport":  ref.is_non_airport(q),
+                "should_validate_as_iata": ref.should_validate_as_iata(q),
+                "airport":    ref.airport(q),
+                "currency":   ref.currency(q),
+                "country":    ref.country(q),
+                "cache_stats":stats,
+            })
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
