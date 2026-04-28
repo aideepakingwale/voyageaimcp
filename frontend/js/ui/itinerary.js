@@ -116,6 +116,7 @@ function _buildCard(p) {
     intent, recs, dates, flight, hotel, transf, exps,
     total, budget,
     loyaltyHTML, ancillaryHTML, personalisedHTML,
+    visaHTML = '',
     hasCustomer,
   } = p;
 

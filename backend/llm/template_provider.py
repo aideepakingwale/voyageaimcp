@@ -43,6 +43,9 @@ class TemplateProvider(BaseProvider):
         """Parse prompt for MCP data blocks and build structured itinerary."""
 
         # Extract destination using shared map (same as MCPRelevanceScorer)
+        is_modification = False
+        last_intent     = None
+
         try:
             from reasoning.mcp_scorer import extract_destination
             _CN = {"LIS":"Lisbon","BCN":"Barcelona","MAD":"Madrid","FCO":"Rome",
@@ -134,7 +137,7 @@ class TemplateProvider(BaseProvider):
             },
             "destinations": [dest_city],
             "summary": (
-                f"{nights}-night trip to {dest_city} for {guests} guests. "
+                f"{'Updated: ' if is_modification else ''}{nights}-night trip to {dest_city} for {guests} guests. "
                 f"{airline} direct flight, {hstars}★ {hname}. "
                 f"Total: £{total:.0f} (template fallback — verify with live booking)."
             ),

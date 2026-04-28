@@ -1,9 +1,7 @@
 """
 VoyageAI RAG Memory Store
-Stores session context (entities, history, confirmed bookings) outside the LLM
-context window. Solves context overflow for long multi-step booking conversations.
-
-In production: replace _sessions dict with Redis or a vector store.
+Stores session context (entities, history, last itinerary, confirmed bookings).
+Each login gets a fresh session — full isolation.
 """
 import time
 import uuid
@@ -12,16 +10,6 @@ from config import Config
 
 
 class MemoryStore:
-    """
-    In-memory session store with TTL matching the GDS session window (30 min).
-    
-    Schema per session:
-      created_at  — Unix timestamp of session creation
-      last_active — Unix timestamp of last access
-      entities    — dict[entity_type → list[{value, confidence, timestamp}]]
-      history     — list[{role, content, ts}]  (capped at 20 turns)
-      confirmed   — dict[element → {data, confirmed_at}]
-    """
 
     def __init__(self, ttl: int = None):
         self._sessions: dict[str, dict] = {}
@@ -32,11 +20,12 @@ class MemoryStore:
     def create_session(self) -> str:
         sid = str(uuid.uuid4())[:8]
         self._sessions[sid] = {
-            "created_at":  time.time(),
-            "last_active": time.time(),
-            "entities":    {},
-            "history":     [],
-            "confirmed":   {},
+            "created_at":    time.time(),
+            "last_active":   time.time(),
+            "entities":      {},
+            "history":       [],   # [{role, content, ts}]
+            "confirmed":     {},
+            "last_itinerary": None,  # full LLM output from last successful plan
         }
         return sid
 
@@ -54,7 +43,7 @@ class MemoryStore:
         s = self._sessions.get(sid)
         return time.time() - s["created_at"] if s else float("inf")
 
-    # ── Entity store (RAG write) ──────────────────────────────
+    # ── Entity store ──────────────────────────────────────────
 
     def store_entity(self, sid: str, entity_type: str,
                      value, confidence: float = 1.0):
@@ -68,11 +57,8 @@ class MemoryStore:
             "timestamp":  time.time(),
         })
 
-    # ── Entity retrieval (RAG read) ───────────────────────────
-
     def retrieve_entity(self, sid: str, entity_type: str,
                         min_confidence: float = None):
-        """Return the most recently stored entity above confidence threshold."""
         threshold = min_confidence or Config.RAG_SIMILARITY_THRESHOLD
         s = self._sessions.get(sid)
         if not s:
@@ -82,7 +68,6 @@ class MemoryStore:
         return valid[-1]["value"] if valid else None
 
     def retrieve_all_entities(self, sid: str) -> dict:
-        """Return latest value for every stored entity type."""
         s = self._sessions.get(sid)
         if not s:
             return {}
@@ -99,11 +84,28 @@ class MemoryStore:
         if not s:
             return
         s["history"].append({"role": role, "content": content, "ts": time.time()})
-        s["history"] = s["history"][-20:]   # keep last 20 turns
+        s["history"] = s["history"][-30:]
 
     def get_history(self, sid: str, max_turns: int = 10) -> list:
         s = self._sessions.get(sid)
         return s["history"][-max_turns:] if s else []
+
+    # ── Last itinerary (full plan) ────────────────────────────
+
+    def store_itinerary(self, sid: str, itinerary: dict):
+        """Store the full last successful itinerary for modification requests."""
+        s = self._sessions.get(sid)
+        if s:
+            s["last_itinerary"] = {
+                "data":      itinerary,
+                "stored_at": time.time(),
+            }
+
+    def get_last_itinerary(self, sid: str) -> dict | None:
+        s = self._sessions.get(sid)
+        if not s or not s.get("last_itinerary"):
+            return None
+        return s["last_itinerary"]["data"]
 
     # ── Booking confirmations ─────────────────────────────────
 
@@ -116,35 +118,115 @@ class MemoryStore:
         s = self._sessions.get(sid)
         return s["confirmed"] if s else {}
 
-    # ── LLM context summary ───────────────────────────────────
+    # ── Intent detection ──────────────────────────────────────
+
+    def is_modification_request(self, message: str) -> bool:
+        """Detect if the user is modifying a previous plan rather than starting fresh."""
+        msg_lower = message.lower().strip()
+        modification_patterns = [
+            # Date changes
+            "change the date", "change dates", "different date", "different dates",
+            "change the departure", "change the return", "new dates", "other dates",
+            "move it to", "move the trip", "reschedule", "postpone", "bring forward",
+            "earlier date", "later date", "same trip but",
+            # Guest changes
+            "change the number", "add another", "one more person", "fewer people",
+            "just two of us", "only one", "actually three", "we are",
+            # Budget changes
+            "increase the budget", "reduce the budget", "cheaper option", "more expensive",
+            "upgrade", "downgrade", "better hotel", "cheaper hotel",
+            # Hotel changes
+            "different hotel", "change the hotel", "upgrade the room", "different room",
+            "5 star", "4 star", "beachfront", "city centre",
+            # Flight changes
+            "different flight", "earlier flight", "later flight", "direct flight",
+            "change the airline", "upgrade to business",
+            # General modification intent
+            "i want to change", "can we change", "could we change", "let's change",
+            "instead", "actually", "instead of that", "not that one",
+            "what if", "what about", "how about", "can you update",
+            "update the", "modify the", "adjust the", "tweak the",
+            "keep everything but", "keep the same", "same but",
+            "amend", "alter", "revise",
+        ]
+        return any(p in msg_lower for p in modification_patterns)
+
+    # ── Context summary for LLM ───────────────────────────────
 
     def build_context_summary(self, sid: str) -> str:
-        """Build a compact context string to inject into LLM prompts."""
-        entities  = self.retrieve_all_entities(sid)
-        confirmed = self.get_confirmed(sid)
-        history   = self.get_history(sid, max_turns=6)
+        """
+        Build a rich context string injected into the LLM prompt.
+        Includes: entities, last plan summary, conversation history.
+        """
+        entities       = self.retrieve_all_entities(sid)
+        confirmed      = self.get_confirmed(sid)
+        history        = self.get_history(sid, max_turns=10)
+        last_itinerary = self.get_last_itinerary(sid)
 
         lines = ["=== SESSION CONTEXT ==="]
 
+        # ── Previously confirmed preferences ──────────────────
         if entities:
-            lines.append("Confirmed preferences:")
+            lines.append("\nConfirmed preferences from this conversation:")
+            priority = ["destination","city_code","country_code","departure_date",
+                        "return_date","guests","adults","children","budget_gbp",
+                        "origin_iata","loyalty_tier","travel_style"]
+            shown = set()
+            for k in priority:
+                if k in entities:
+                    lines.append(f"  {k}: {json.dumps(entities[k])}")
+                    shown.add(k)
             for k, v in entities.items():
-                lines.append(f"  {k}: {json.dumps(v)}")
+                if k not in shown:
+                    lines.append(f"  {k}: {json.dumps(v)}")
 
+        # ── Last itinerary — critical for modifications ────────
+        if last_itinerary:
+            intent = last_itinerary.get("intent", {})
+            recs   = last_itinerary.get("recommendations", {})
+            dates  = intent.get("dates", {})
+            lines.append("\nLAST PLANNED ITINERARY (the trip already discussed):")
+            lines.append(f"  Destination: {intent.get('destination','?')} ({intent.get('city_code','?')})")
+            lines.append(f"  Dates:       {dates.get('departure_date','?')} → {dates.get('return_date','?')} ({dates.get('nights','?')} nights)")
+            lines.append(f"  Guests:      {intent.get('guests','?')} ({intent.get('adults','?')} adults, {intent.get('children','?')} children)")
+            lines.append(f"  Budget:      £{intent.get('budget_gbp','?')}")
+            lines.append(f"  Total cost:  £{last_itinerary.get('total_cost_gbp','?')}")
+            # Include first flight and hotel so LLM can reference them
+            flights = recs.get("flights", [])
+            if flights:
+                f0 = flights[0]
+                lines.append(f"  Best flight: {f0.get('airline','?')} {f0.get('flight_number','?')} £{f0.get('price_gbp','?')}")
+            hotels = recs.get("hotels", [])
+            if hotels:
+                h0 = hotels[0]
+                lines.append(f"  Best hotel:  {h0.get('name','?')} {h0.get('stars','?')}★ £{h0.get('price_per_night','?')}/night")
+            prefs = intent.get("preferences", {})
+            if prefs:
+                lines.append(f"  Preferences: {json.dumps(prefs)}")
+
+        # ── Confirmed bookings ─────────────────────────────────
         if confirmed:
-            lines.append("Confirmed booking elements:")
+            lines.append("\nConfirmed booking elements:")
             for k, v in confirmed.items():
                 lines.append(f"  ✓ {k}: {json.dumps(v)}")
 
+        # ── Full conversation history (not truncated) ──────────
         if history:
-            lines.append("Recent conversation:")
-            for turn in history[-4:]:
-                preview = str(turn["content"])[:200]
-                lines.append(f"  [{turn['role']}]: {preview}")
+            lines.append("\nConversation so far:")
+            for turn in history:
+                role    = turn["role"].upper()
+                content = str(turn["content"])
+                # Show full user messages; summarise long AI responses
+                if role == "USER":
+                    lines.append(f"  [{role}]: {content}")
+                else:
+                    # For AI turns, show first 300 chars (summary)
+                    preview = content[:300] + ("…" if len(content) > 300 else "")
+                    lines.append(f"  [{role}]: {preview}")
 
-        lines.append("======================")
+        lines.append("\n======================")
         return "\n".join(lines)
 
 
-# Module-level singleton — import this everywhere
+# Module-level singleton
 memory_store = MemoryStore()

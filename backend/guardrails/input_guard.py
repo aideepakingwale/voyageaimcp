@@ -26,12 +26,19 @@ class InputGuardrail:
     ]
 
     TRAVEL_SIGNALS = [
+        # Core travel terms
         "flight", "hotel", "trip", "travel", "holiday", "vacation",
         "book", "journey", "destination", "airport", "visa", "passport",
         "accommodation", "transfer", "car", "experience", "tour", "plan",
         "weather", "currency", "budget", "night", "check.?in", "check.?out",
         "family", "adult", "child", "passenger", "ticket", "itinerary",
         "resort", "cruise", "ski", "beach", "city", "abroad", "overseas",
+        # Modification / follow-up signals
+        "change", "update", "modify", "instead", "different",
+        "cheaper", "upgrade", "earlier", "later", "fewer", "more",
+        "reschedule", "amend", "adjust", "keep", "same but",
+        "dates", "guests", "people", "person", "rooms", "stars",
+        "what if", "how about", "what about", "actually",
     ]
 
     def validate(self, text: str) -> GuardrailResult:

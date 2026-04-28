@@ -28,7 +28,8 @@ from mcp_servers   import MCP_REGISTRY
 from guardrails    import GuardrailOrchestrator
 from rag.memory_store import memory_store
 
-from .prompts            import SYSTEM_PROMPT, INTENT_PROMPT, build_fix_hint
+from .prompts            import (SYSTEM_PROMPT, INTENT_PROMPT, build_fix_hint,
+                                 build_modification_context)
 from .mcp_scorer         import MCPRelevanceScorer
 from .confidence_scorer  import ConfidenceScorer
 
@@ -155,10 +156,23 @@ class ReasoningEngine:
         context    = memory_store.build_context_summary(session_id)
         rag_recall = self._estimate_rag_recall(session_id)
 
+        # Detect if this is a modification of a previous plan
+        last_itinerary    = memory_store.get_last_itinerary(session_id)
+        is_modification   = memory_store.is_modification_request(user_message) and bool(last_itinerary)
+        mod_context       = build_modification_context(user_message, last_itinerary) if is_modification else ""
+
+        if is_modification:
+            self._log.info("Modification request detected", extra={
+                "session_id":  session_id,
+                "user_msg":    user_message,
+                "last_dest":   last_itinerary.get("intent",{}).get("destination","?"),
+            })
+
         # Build prompt
         user_prompt = INTENT_PROMPT.format(
             user_message=user_message,
             context=context,
+            modification_context=mod_context,
             mcp_data=self._mcp_scorer.summarise_mcp(mcp_data),
             fix_hint=build_fix_hint(fix_hint),
         )
@@ -227,9 +241,14 @@ class ReasoningEngine:
                              "provider": result.get("llm_provider",""),
                              "confidence": result.get("confidence",{}).get("overall",0),
                              "attempt": result.get("attempt",1)})
+        # Store full itinerary for future modification requests
+        llm_out = result.get("llm_output", {})
+        if llm_out.get("intent") and llm_out.get("recommendations"):
+            memory_store.store_itinerary(session_id, llm_out)
+
         memory_store.add_turn(
             session_id, "assistant",
-            result["llm_output"].get("summary", ""),
+            llm_out.get("summary", ""),
         )
         return result
 

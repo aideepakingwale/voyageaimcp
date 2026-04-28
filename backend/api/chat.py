@@ -87,7 +87,7 @@ def chat():
                 memory_store.store_entity(sid, key, val, confidence=1.0)
 
     # Store detected/user origin airport in session
-    origin = body.get("origin_iata", "").strip().upper()
+    origin = (body.get("origin_iata") or "").strip().upper() or None
     if origin and len(origin) == 3:
         memory_store.store_entity(sid, "origin_iata", origin, confidence=1.0)
     elif not memory_store.retrieve_entity(sid, "origin_iata"):
@@ -179,4 +179,8 @@ def demo():
         "elapsed_ms":320,
     }
     memory_store.add_turn(sid, "assistant", result["llm_output"]["summary"])
+    # Add modification flag to response
+    result["is_modification"] = memory_store.is_modification_request(message) and bool(
+        memory_store.get_last_itinerary(session_id)
+    )
     return jsonify(result)

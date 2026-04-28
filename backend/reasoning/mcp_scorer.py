@@ -168,8 +168,21 @@ class MCPRelevanceScorer:
 
         entities = memory_store.retrieve_all_entities(session_id)
 
-        # ── Extract destination from TEXT (not session) ────────
-        dest, country = extract_destination(text, entities)
+        # ── Extract destination ───────────────────────────────
+        # For modification requests, keep the last known destination
+        # Only re-extract if the user mentions a different destination
+        last_dest    = entities.get("city_code")
+        text_dest, text_country = extract_destination(text, {})  # extract from text alone
+
+        # Use text extraction if it found something meaningful
+        # Keep last destination for modification-style messages
+        if text_dest and text_dest != "LIS":
+            dest, country = text_dest, text_country
+        elif last_dest:
+            dest    = last_dest
+            country = entities.get("country_code", "PT")
+        else:
+            dest, country = "LIS", "PT"  # absolute fallback
 
         # ── Extract other params from text ─────────────────────
         guests   = self._extract_int(text, r"(\d+)\s*(?:people|guests|adults|passengers|of\s+us)", 2)
