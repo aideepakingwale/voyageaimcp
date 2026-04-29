@@ -65,39 +65,50 @@ class TemplateProvider(BaseProvider):
         except Exception:
             dest_code = "LIS"; country_code = "PT"; dest_city = "Lisbon"
 
-        # Extract guests — handle both JSON and natural language formats
-        # "N adults and M children", "N adults", "guests": N
+        # Extract guests — all patterns, most specific wins
         adults_m   = re.search(r'(\d+)\s*adults?', prompt, re.IGNORECASE)
         children_m = re.search(r'(\d+)\s*(?:children|child|kids?)', prompt, re.IGNORECASE)
         guests_m   = re.search(r'"guests"\s*:\s*(\d+)', prompt)
+        people_m   = re.search(r'(\d+)\s*(?:people|guests|passengers|of us|in total)', prompt, re.IGNORECASE)
         family_m   = re.search(r'family of (\d+)', prompt, re.IGNORECASE)
+        solo_m     = any(p in prompt.lower() for p in ["just me","solo","by myself","alone","on my own"])
+        couple_m   = any(p in prompt.lower() for p in ["couple","two of us","just us two","just the two"])
 
-        if adults_m and children_m:
+        if solo_m:
+            guests = 1; adults = 1; children = 0
+        elif couple_m:
+            guests = 2; adults = 2; children = 0
+        elif adults_m and children_m:
             adults   = int(adults_m.group(1))
             children = int(children_m.group(1))
             guests   = adults + children
         elif guests_m:
             guests   = int(guests_m.group(1))
-            adults   = max(1, guests - (int(children_m.group(1)) if children_m else 0))
             children = int(children_m.group(1)) if children_m else 0
+            adults   = max(1, guests - children)
         elif family_m:
             guests   = int(family_m.group(1))
-            adults   = max(1, guests // 2); children = guests - adults
+            children = max(0, guests - 2); adults = guests - children
         elif adults_m:
             adults   = int(adults_m.group(1))
             children = int(children_m.group(1)) if children_m else 0
             guests   = adults + children
+        elif people_m:
+            guests   = int(people_m.group(1))
+            adults   = guests; children = 0
         else:
             guests = 2; adults = 2; children = 0
 
-        # Extract budget — "Budget: GBP N", "£N", JSON "budget_gbp": N
-        budg_kw  = re.search(r'Budget:\s*(?:GBP|£)\s*([\d,]+)', prompt, re.IGNORECASE)
-        budg_gbp = re.search(r'[£$]([\d,]+)', prompt)
+        # Extract budget from all patterns
+        budg_kw  = re.search(r'Budget:\s*(?:GBP|£)?\s*([\d,]+)', prompt, re.IGNORECASE)
+        budg_sym = re.search(r'[£$]([\d,]+)', prompt)
         budget_m = re.search(r'"budget_gbp"\s*:\s*([\d.]+)', prompt)
+        budg_words = re.search(r'([\d,]+)\s*(?:pounds?|gbp)\b', prompt, re.IGNORECASE)
 
-        budget = (float(budg_kw.group(1).replace(",",""))  if budg_kw
-                  else float(budget_m.group(1))             if budget_m
-                  else float(budg_gbp.group(1).replace(",","")) if budg_gbp
+        budget = (float(budg_kw.group(1).replace(",",""))      if budg_kw
+                  else float(budget_m.group(1))                if budget_m
+                  else float(budg_sym.group(1).replace(",","")) if budg_sym
+                  else float(budg_words.group(1).replace(",","")) if budg_words
                   else 3000)
 
         # Extract nights — handle "Duration: N nights", "N nights", JSON "nights": N

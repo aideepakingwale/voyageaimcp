@@ -168,57 +168,69 @@ class MCPRelevanceScorer:
 
         entities = memory_store.retrieve_all_entities(session_id)
 
-        # ── Extract destination via resolver chain ────────────
-        last_dest    = entities.get("city_code")
-        text_dest, text_country = extract_destination(text, {})
+        # ── Destination: entities WIN (pre-extracted by universal_extractor) ─
+        # Priority: session entity → text extraction → resolver → fallback
+        dest    = (entities.get("city_code")
+                   or entities.get("destination_iata"))
+        country = entities.get("country_code", "")
 
-        # Try the full resolver for better accuracy on complex phrases
-        if not text_dest or text_dest == "LIS":
-            try:
-                from reasoning.destination_resolver import resolve_destination
-                resolved = resolve_destination(text, entities)
-                if resolved.get("iata") and resolved["confidence"] >= 0.80:
-                    text_dest    = resolved["iata"]
-                    text_country = resolved.get("country_code", "")
-            except Exception:
-                pass
+        if not dest or dest == "LIS":
+            # Try text extraction as fallback
+            text_dest, text_country = extract_destination(text, {})
+            if text_dest and text_dest != "LIS":
+                dest, country = text_dest, text_country
+            else:
+                try:
+                    from reasoning.destination_resolver import resolve_destination
+                    resolved = resolve_destination(text, entities)
+                    if resolved.get("iata") and resolved.get("confidence", 0) >= 0.75:
+                        dest    = resolved["iata"]
+                        country = resolved.get("country_code", "")
+                except Exception:
+                    pass
 
-        if text_dest and text_dest != "LIS":
-            dest, country = text_dest, text_country
-        elif last_dest:
-            dest    = last_dest
-            country = entities.get("country_code", "PT")
-        else:
-            dest, country = "LIS", "PT"  # absolute fallback
+        if not dest:
+            dest    = "LIS"  # absolute last resort
+            country = "PT" 
 
         # ── Extract other params from text ─────────────────────
-        guests   = self._extract_int(text, r"(\d+)\s*(?:people|guests|adults|passengers|of\s+us)", 2)
-        budget   = self._extract_int(text, r"[£$€](\d[\d,]*)", 3000, strip_commas=True)
-        nights   = self._extract_int(text, r"(\d+)\s*nights?", 7)
-        children = self._extract_int(text, r"(\d+)\s*(?:child(?:ren)?|kids?)", 0)
-        adults   = max(1, guests - children)
+        # Guests/budget: entities first (from universal_extractor), then text
+        guests   = (int(entities.get("guests", 0)) or
+                    self._extract_int(text, r"(\d+)\s*(?:people|guests|adults|passengers|of\s+us)", 2))
+        children = (int(entities.get("children", 0)) or
+                    self._extract_int(text, r"(\d+)\s*(?:child(?:ren)?|kids?)", 0))
+        adults   = (int(entities.get("adults", 0)) or max(1, guests - children))
+        budget   = (int(entities.get("budget_gbp", 0)) or
+                    self._extract_int(text, r"[£$€](\d[\d,]*)", 3000, strip_commas=True))
+        nights   = (int(entities.get("nights", 0)) or
+                    self._extract_int(text, r"(\d+)\s*nights?", 7))
 
         # Month from departure date or "in October" etc.
         month    = self._extract_month(text) or int(
             (entities.get("departure_date", f"{datetime.now().year}-08-01") or "").split("-")[1]
             if entities.get("departure_date") else "8"
         )
-        # Extract date from prompt text first (handles modification prompts)
-        # "Departure: 2026-09-15" or any ISO date in the prompt
-        _dep_kw   = re.search(r"Departure:\s*(20\d\d-\d{2}-\d{2})", text, re.IGNORECASE)
-        _iso_all  = re.findall(r"20\d\d-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])", text)
-        _dur_kw   = re.search(r"Duration:\s*(\d+)\s*nights?", text, re.IGNORECASE)
+        # Dates: read from session entities (set by universal_extractor)
+        _entity_date = entities.get("departure_date")
+        _entity_nights = entities.get("nights")
+        if _entity_nights:
+            nights = int(_entity_nights)
+
+        # Also check prompt text for "Departure: YYYY-MM-DD" (modification prompts)
+        _dep_kw  = re.search(r"Departure:\s*(20\d\d-\d{2}-\d{2})", text, re.IGNORECASE)
+        _iso_all = re.findall(r"20\d\d-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])", text)
+        _dur_kw  = re.search(r"Duration:\s*(\d+)\s*nights?", text, re.IGNORECASE)
         if _dur_kw: nights = int(_dur_kw.group(1))
 
         _prompt_date = (_dep_kw.group(1) if _dep_kw
                         else _iso_all[0] if _iso_all else None)
-        _entity_date = entities.get("departure_date")
 
-        # Prompt text wins over stale entity (modification prompts have fresh dates)
-        check_in  = (_prompt_date or _entity_date or
+        # Entity date is already extracted and validated — use it
+        check_in  = (_entity_date or _prompt_date or
                      (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d"))
-        check_out = (datetime.strptime(check_in, "%Y-%m-%d") +
-                     timedelta(days=nights)).strftime("%Y-%m-%d")
+        check_out = (entities.get("return_date") or
+                     (datetime.strptime(check_in, "%Y-%m-%d") +
+                      timedelta(days=nights)).strftime("%Y-%m-%d"))
 
         passport  = entities.get("passport_country", "GB")
 
