@@ -512,3 +512,59 @@ textarea::placeholder { color: var(--dim); }
   align-items: flex-end;
   gap:         8px;
 }
+
+/* ── Input wrap with voice + send buttons ── */
+.input-wrap {
+  display:        flex;
+  align-items:    flex-end;
+  gap:            0;
+  background:     var(--bg2);
+  border:         1px solid var(--border);
+  border-radius:  var(--radius);
+  padding:        4px 6px 4px 14px;
+  flex:           1;
+  transition:     border-color .2s;
+}
+.input-wrap:focus-within { border-color: var(--teal); }
+.input-wrap textarea {
+  flex:           1;
+  background:     transparent;
+  border:         none;
+  outline:        none;
+  resize:         none;
+  color:          var(--text);
+  font-family:    var(--font);
+  font-size:      14px;
+  line-height:    1.5;
+  padding:        6px 0;
+  min-height:     36px;
+  max-height:     160px;
+}
+.input-actions {
+  display:        flex;
+  align-items:    center;
+  gap:            4px;
+  padding-left:   4px;
+  flex-shrink:    0;
+}
+.voice-btn {
+  display:        flex;
+  align-items:    center;
+  justify-content:center;
+  width:          36px;
+  height:         36px;
+  border:         1px solid var(--border);
+  border-radius:  50%;
+  background:     transparent;
+  color:          var(--muted);
+  cursor:         pointer;
+  flex-shrink:    0;
+  transition:     all .2s;
+}
+.voice-btn:hover { border-color:var(--teal); color:var(--teal); background:rgba(0,201,167,.06); }
+.voice-btn.voice-listening {
+  background:  rgba(231,76,60,.1);
+  border-color:var(--red);
+  color:       var(--red);
+  animation:   voicePulse 1.2s ease-in-out infinite;
+}

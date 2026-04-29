@@ -235,6 +235,9 @@ function _bindEvents(auth) {
   // Send button
   $('#sendBtn')?.addEventListener('click', send);
 
+  // Voice input — microphone button
+  initVoiceInput('#messageInput', '#voiceBtn');
+
   // Textarea
   const ta = $('#messageInput');
   if (ta) {
@@ -502,6 +505,13 @@ function _tierWelcome(tier, points) {
 
 window.VoyageApp = { send, confirmEl, cancelBooking, modifyTrip, switchTab, toggleAncillary };
 
+// Direct global fallback so onclick works even during module init
+window.toggleAncillary = toggleAncillary;
+window.switchTab       = switchTab;
+window.confirmEl       = confirmEl;
+window.cancelBooking   = cancelBooking;
+window.modifyTrip      = modifyTrip;
+
 // ── Start ─────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', init);
@@ -509,12 +519,10 @@ document.addEventListener('DOMContentLoaded', init);
 function _renderSuggestions(text, suggestions) {
   // Convert **bold** and numbered lists to HTML
   const html = text
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    // Fixed: Escaped the newline characters and handled potential list items
+    .replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n(\d+)\. /g, '</p><p class="sug-item">$1. ')
     .replace(/\n/g, '<br>');
-
   return `<div class="suggestion-card">
     <div class="sug-header">✈ Destination Suggestions</div>
     <div class="sug-body"><p>${html}</p></div>
@@ -525,3 +533,4 @@ function _renderSuggestions(text, suggestions) {
     </div>
   </div>`;
 }
+

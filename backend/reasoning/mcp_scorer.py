@@ -168,14 +168,21 @@ class MCPRelevanceScorer:
 
         entities = memory_store.retrieve_all_entities(session_id)
 
-        # ── Extract destination ───────────────────────────────
-        # For modification requests, keep the last known destination
-        # Only re-extract if the user mentions a different destination
+        # ── Extract destination via resolver chain ────────────
         last_dest    = entities.get("city_code")
-        text_dest, text_country = extract_destination(text, {})  # extract from text alone
+        text_dest, text_country = extract_destination(text, {})
 
-        # Use text extraction if it found something meaningful
-        # Keep last destination for modification-style messages
+        # Try the full resolver for better accuracy on complex phrases
+        if not text_dest or text_dest == "LIS":
+            try:
+                from reasoning.destination_resolver import resolve_destination
+                resolved = resolve_destination(text, entities)
+                if resolved.get("iata") and resolved["confidence"] >= 0.80:
+                    text_dest    = resolved["iata"]
+                    text_country = resolved.get("country_code", "")
+            except Exception:
+                pass
+
         if text_dest and text_dest != "LIS":
             dest, country = text_dest, text_country
         elif last_dest:
