@@ -151,3 +151,43 @@
 
 /* Apply animations */
 .sdot { animation: pulse 2s infinite; }
+
+/* ── Destination Suggestion Card ──────────────────────────── */
+.suggestion-card {
+  background:    var(--bg2);
+  border:        1px solid rgba(0,201,167,.3);
+  border-radius: var(--radius);
+  overflow:      hidden;
+  max-width:     520px;
+  margin:        8px 0;
+}
+.sug-header {
+  background:  rgba(0,201,167,.1);
+  padding:     10px 16px;
+  font-weight: 700;
+  font-size:   13px;
+  color:       var(--teal);
+  border-bottom: 1px solid rgba(0,201,167,.2);
+}
+.sug-body {
+  padding:   14px 16px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.sug-body p { margin: 0 0 8px; }
+.sug-body p.sug-item {
+  padding:       8px 12px;
+  background:    var(--bg3);
+  border-radius: 8px;
+  margin:        6px 0;
+  cursor:        pointer;
+  transition:    background .15s;
+  border-left:   3px solid var(--teal);
+}
+.sug-body p.sug-item:hover {
+  background: rgba(0,201,167,.1);
+}
+.sug-footer {
+  padding:     8px 16px 12px;
+  border-top:  1px solid var(--border);
+}

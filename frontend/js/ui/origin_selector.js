@@ -49,16 +49,21 @@ export async function initOrigin() {
     const r = await fetch(`${API_BASE}/locate`);
     const d = await r.json();
     if (d.detected && d.iata) {
-      _origin = {
-        iata:    d.iata,
-        city:    d.city,
-        country: d.country,
-        display: `${d.city} (${d.iata})`,
-        source:  'ip_detected',
-      };
-      sessionStorage.setItem('voyage_origin', JSON.stringify(_origin));
-      _renderPill('detected');
-      return;
+      if (d.iata && d.city && d.iata !== 'undefined' && d.city !== 'undefined') {
+        _origin = {
+          iata:    d.iata,
+          city:    d.city,
+          country: d.country || '',
+          display: `${d.city} (${d.iata})`,
+          source:  'ip_detected',
+        };
+        sessionStorage.setItem('voyage_origin', JSON.stringify(_origin));
+        _renderPill('detected');
+        window.dispatchEvent(new CustomEvent('originChanged', {
+          detail: { iata: d.iata, display: _origin.display }
+        }));
+        return;
+      }
     }
   } catch { /* network error */ }
 
@@ -201,10 +206,11 @@ async function _resolveAndSave(text) {
 }
 
 function _confirmOrigin(iata, display) {
-  setOrigin(iata, display, 'manual');
+  if (!iata || iata === 'undefined') return;
+  const safeDisplay = display || iata;
+  setOrigin(iata, safeDisplay, 'manual');
   window._closeOriginModal();
-  // Notify app.js
-  window.dispatchEvent(new CustomEvent('originChanged', { detail: { iata, display } }));
+  window.dispatchEvent(new CustomEvent('originChanged', { detail: { iata, display: safeDisplay } }));
 }
 
 window._selectOriginChip = function (label) {

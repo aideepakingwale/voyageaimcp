@@ -20,6 +20,7 @@ import { $, setText, autoResize, show,
 import { tierIcon, destIcon }              from './utils/format.js';
 import { saveContextToLocalStorage, loadContextFromLocalStorage,
          clearLocalStorage }             from './state.js';
+import { initVoiceInput }                from './ui/voice_input.js';
 import { toggleAncillary as _toggleAnc,
          getAncillaryTotal }               from './state.js';
 import { buildRecommendationPrompt,
@@ -82,7 +83,13 @@ async function init() {
   `);
 
   // Update header
-  setText('#headerSub', `${auth.name} · ${auth.travel_style || 'leisure'} traveller`);
+  // Build subtitle — guard against undefined values
+  const _style  = (auth.travel_style || '').toLowerCase().trim();
+  const _origin = getOriginDisplay();
+  const _sub    = _style && _style !== 'undefined'
+    ? `${auth.name} · ${_style} traveller`
+    : `${auth.name}`;
+  setText('#headerSub', _sub);
 
   // Create fresh session for this login
   state.setSessionId(auth.session_id);
@@ -248,10 +255,14 @@ function _bindEvents(auth) {
   // Sign out
   $('#signoutBtn')?.addEventListener('click', () => doLogout(auth));
 
-  // When user changes origin airport, update state
+  // When origin detected or changed, update subtitle
   window.addEventListener('originChanged', e => {
     const { iata, display } = e.detail;
-    setText('#headerSub', `${auth.name} · Flying from ${display}`);
+    if (display && iata && iata !== 'undefined') {
+      const style = (auth.travel_style || '').toLowerCase().trim();
+      const stylePart = style && style !== 'undefined' ? ` · ${style} traveller` : '';
+      setText('#headerSub', `${auth.name}${stylePart} · ✈ ${display}`);
+    }
   });
 }
 
@@ -494,3 +505,26 @@ window.VoyageApp = { send, confirmEl, cancelBooking, modifyTrip, switchTab, togg
 // ── Start ─────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', init);
+
+function _renderSuggestions(text, suggestions) {
+  // Convert **bold** and numbered lists to HTML
+  const html = text
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/
+
+/g, '</p><p>')
+    .replace(/
+(\d+)\. /g, '</p><p class="sug-item">$1. ')
+    .replace(/
+/g, '<br>');
+  return `<div class="suggestion-card">
+    <div class="sug-header">✈ Destination Suggestions</div>
+    <div class="sug-body"><p>${html}</p></div>
+    <div class="sug-footer">
+      <span style="color:var(--dim);font-size:11px">
+        Reply with the destination name or number to get a full itinerary
+      </span>
+    </div>
+  </div>`;
+}
+

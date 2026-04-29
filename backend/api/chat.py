@@ -88,7 +88,7 @@ def chat():
 
     log.info("Extracting intent via LLM", extra={
         "session": session_id,
-        "message": message,
+        "user_msg": message,
         "has_itinerary": bool(last_itinerary),
     })
 

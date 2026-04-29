@@ -439,3 +439,76 @@ textarea::placeholder { color: var(--dim); }
   color:var(--muted); cursor:pointer; transition:all .2s;
 }
 .om-chip:hover { border-color:var(--teal); color:var(--teal); }
+
+/* ═══════════════════════════════════════════════════════════
+   Voice Input Button
+   ═══════════════════════════════════════════════════════════ */
+
+.voice-btn {
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  width:            40px;
+  height:           40px;
+  border:           1px solid var(--border);
+  border-radius:    50%;
+  background:       var(--bg3);
+  color:            var(--muted);
+  cursor:           pointer;
+  flex-shrink:      0;
+  transition:       all .2s;
+  position:         relative;
+  overflow:         hidden;
+}
+.voice-btn:hover { border-color:var(--teal); color:var(--teal); }
+
+/* Listening state — pulsing red ring */
+.voice-btn.voice-listening {
+  background:    rgba(231,76,60,.12);
+  border-color:  var(--red);
+  color:         var(--red);
+  animation:     voicePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voicePulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(231,76,60,.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(231,76,60,0); }
+}
+
+/* Sound wave animation inside listening button */
+.voice-wave {
+  display:     flex;
+  align-items: center;
+  gap:         2px;
+  height:      18px;
+}
+.voice-wave span {
+  display:          block;
+  width:            3px;
+  background:       var(--red);
+  border-radius:    2px;
+  animation:        waveBar 0.9s ease-in-out infinite;
+}
+.voice-wave span:nth-child(1) { height:4px;  animation-delay:0s;    }
+.voice-wave span:nth-child(2) { height:12px; animation-delay:.15s;  }
+.voice-wave span:nth-child(3) { height:16px; animation-delay:.3s;   }
+.voice-wave span:nth-child(4) { height:8px;  animation-delay:.45s;  }
+
+@keyframes waveBar {
+  0%,100% { transform:scaleY(.4); opacity:.6; }
+  50%      { transform:scaleY(1.0); opacity:1; }
+}
+
+/* Hint bubble above input */
+@keyframes fadeIn {
+  from { opacity:0; transform:translateX(-50%) translateY(4px); }
+  to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+
+/* Ensure chat input row has room for both buttons */
+.chat-input-row,
+.input-row {
+  display:     flex;
+  align-items: flex-end;
+  gap:         8px;
+}

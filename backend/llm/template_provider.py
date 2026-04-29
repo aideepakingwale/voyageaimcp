@@ -237,3 +237,157 @@ class TemplateProvider(BaseProvider):
                 f"Recommend retrying with a live LLM provider for optimal results."
             ),
         }
+
+    def _is_vague_request(self, prompt: str) -> bool:
+        """Detect if the user wants suggestions rather than a specific trip."""
+        import re
+        p = prompt.lower()
+        # Must NOT already have a specific destination or city code
+        has_specific = bool(re.search(
+            r'\b(to|visit|fly to|going to|trip to|holiday in|in)\s+[A-Z][a-z]{3}', prompt))
+        if has_specific:
+            return False
+        vague_patterns = [
+            r'somewhere (warm|hot|sunny|tropical|exotic|relaxing|nice)',
+            r'(beach|ski|city|cultural|adventure|luxury|family|romantic|couple)\s+holiday',
+            r'(beach|ski|city|cultural|adventure|luxury|family|romantic)\s+destination',
+            r'(europe|asia|caribbean|mediterranean|tropical)\s+(beach|holiday|trip|destination)',
+            r'suggestions?\s+for',
+            r'recommend\s+(a|some|me)',
+            r'where\s+should\s+(i|we)\s+go',
+            r'where\s+can\s+(i|we)\s+go',
+            r'what\s+(destination|place)s?\s+(would|do you)',
+            r'any\s+(good|great|nice)\s+(ideas?|suggestions?|places?)',
+            r'not sure where',
+            r'help me (choose|decide|pick)',
+            r'options? for',
+            r'alternatives? to',
+        ]
+        return any(re.search(p_re, p) for p_re in vague_patterns)
+
+    def _build_suggestions(self, prompt: str) -> dict:
+        """Build destination suggestions for vague/open-ended requests."""
+        import re, random
+        p = prompt.lower()
+
+        # Detect theme
+        themes = {
+            'beach':     ('beach', ['Algarve','Santorini','Maldives','Bali','Seychelles',
+                                    'Barbados','Mauritius','Phuket','Dubrovnik','Malta']),
+            'ski':       ('ski',   ['Chamonix','Verbier',"Val d'Isere",'Zermatt',
+                                    'Innsbruck','Aspen','Niseko','Val Thorens']),
+            'city':      ('city break', ['Rome','Barcelona','Tokyo','New York','Paris',
+                                          'Amsterdam','Lisbon','Prague','Marrakech','Dubai']),
+            'cultural':  ('cultural', ['Kyoto','Istanbul','Cairo','Rome','Marrakech',
+                                        'Petra','Athens','Mexico City','Varanasi','Cartagena']),
+            'luxury':    ('luxury', ['Maldives','Seychelles','Bora Bora','Amalfi Coast',
+                                      'Santorini','Dubai','Mauritius','St Barts','Mykonos']),
+            'family':    ('family', ['Tenerife','Mallorca','Gran Canaria','Cyprus','Malta',
+                                      'Orlando','Bali','Thailand','Portugal','Greece']),
+            'romantic':  ('romantic', ['Santorini','Venice','Maldives','Bali','Tuscany',
+                                        'Paris','Seychelles','Amalfi','Bora Bora','Kyoto']),
+            'adventure': ('adventure', ['New Zealand','Costa Rica','Nepal','Patagonia',
+                                          'Iceland','Tanzania','Peru','Vietnam','Jordan']),
+            'europe':    ('European', ['Santorini','Dubrovnik','Algarve','Amalfi Coast',
+                                         'Barcelona','Mallorca','Malta','Montenegro']),
+            'caribbean': ('Caribbean', ['Barbados','St Lucia','Turks & Caicos',
+                                          'Antigua','Jamaica','Grenada','Anguilla']),
+            'asia':      ('Asian', ['Bali','Thailand','Vietnam','Japan','Singapore',
+                                     'Sri Lanka','Maldives','Cambodia','Malaysia']),
+        }
+
+        theme_key, theme_label, destinations = 'beach', 'beach', [
+            'Algarve','Santorini','Maldives','Bali','Seychelles'
+        ]
+        for key, (label, dests) in themes.items():
+            if key in p or label.lower() in p:
+                theme_key, theme_label, destinations = key, label, dests
+                break
+
+        # Budget hints from prompt
+        budget_hint = 3000
+        bm = re.search(r'£(\d[\d,]*)', prompt)
+        if bm: budget_hint = int(bm.group(1).replace(',',''))
+
+        # Pick 3 distinct destinations
+        picked = random.sample(destinations[:8], min(3, len(destinations)))
+
+        DEST_INFO = {
+            'Algarve':       {'code':'FAO','cc':'PT','time':'May–Oct','price':1400},
+            'Santorini':     {'code':'JTR','cc':'GR','time':'May–Sep','price':2200},
+            'Maldives':      {'code':'MLE','cc':'MV','time':'Nov–Apr','price':3800},
+            'Bali':          {'code':'DPS','cc':'ID','time':'Apr–Oct','price':2800},
+            'Seychelles':    {'code':'SEZ','cc':'SC','time':'Apr–May','price':4200},
+            'Barbados':      {'code':'BGI','cc':'BB','time':'Dec–May','price':3200},
+            'Mauritius':     {'code':'MRU','cc':'MU','time':'May–Nov','price':3500},
+            'Phuket':        {'code':'HKT','cc':'TH','time':'Nov–Apr','price':2400},
+            'Dubrovnik':     {'code':'DBV','cc':'HR','time':'Jun–Sep','price':1800},
+            'Malta':         {'code':'MLA','cc':'MT','time':'May–Oct','price':1200},
+            'Rome':          {'code':'FCO','cc':'IT','time':'Apr–Jun','price':1500},
+            'Barcelona':     {'code':'BCN','cc':'ES','time':'May–Sep','price':1600},
+            'Tokyo':         {'code':'NRT','cc':'JP','time':'Mar–May','price':3200},
+            'Paris':         {'code':'CDG','cc':'FR','time':'year-round','price':1400},
+            'Amsterdam':     {'code':'AMS','cc':'NL','time':'Apr–Aug','price':1300},
+            'Lisbon':        {'code':'LIS','cc':'PT','time':'Apr–Oct','price':1200},
+            'Prague':        {'code':'PRG','cc':'CZ','time':'Apr–Sep','price':1100},
+            'Marrakech':     {'code':'RAK','cc':'MA','time':'Mar–May','price':900},
+            'Dubai':         {'code':'DXB','cc':'AE','time':'Nov–Mar','price':2500},
+            'Mykonos':       {'code':'JMK','cc':'GR','time':'Jun–Sep','price':2400},
+            'Tenerife':      {'code':'TFS','cc':'ES','time':'year-round','price':1600},
+            'Mallorca':      {'code':'PMI','cc':'ES','time':'May–Oct','price':1500},
+            'Gran Canaria':  {'code':'LPA','cc':'ES','time':'year-round','price':1600},
+            'Cyprus':        {'code':'LCA','cc':'CY','time':'May–Oct','price':1400},
+            'Bora Bora':     {'code':'BOB','cc':'PF','time':'May–Oct','price':6500},
+            'Iceland':       {'code':'KEF','cc':'IS','time':'Jun–Aug','price':2800},
+            'New Zealand':   {'code':'AKL','cc':'NZ','time':'Dec–Feb','price':4500},
+            'Vietnam':       {'code':'SGN','cc':'VN','time':'Dec–Apr','price':2200},
+            'Sri Lanka':     {'code':'CMB','cc':'LK','time':'Dec–Mar','price':2600},
+            'St Lucia':      {'code':'UVF','cc':'LC','time':'Jan–Jun','price':3400},
+            'Montenegro':    {'code':'TGD','cc':'ME','time':'Jun–Sep','price':1600},
+            'Amalfi Coast':  {'code':'NAP','cc':'IT','time':'May–Sep','price':2800},
+        }
+
+        option_lines = []
+        first_dest = picked[0] if picked else 'Seychelles'
+        for i, dest in enumerate(picked, 1):
+            info = DEST_INFO.get(dest, {'code':'LIS','cc':'PT','time':'year-round','price':2000})
+            pprice = info['price']
+            option_lines.append(
+                f"{i}. **{dest}** — best {info['time']}. "
+                f"Estimated ~£{pprice:,} per person."
+            )
+
+        option_text = '\n'.join(option_lines)
+        summary = (
+            f"Here are 3 great {theme_label} options that match your profile:\n\n"
+            f"{option_text}\n\n"
+            f"Which would you like me to build a full itinerary for? "
+            f"Just say the number or destination name."
+        )
+
+        first_info = DEST_INFO.get(first_dest, {'code':'LIS','cc':'PT'})
+
+        return {
+            "intent": {
+                "destination":  first_dest,
+                "city_code":    first_info['code'],
+                "country_code": first_info['cc'],
+                "dates": {"departure_date": None, "return_date": None, "nights": 7},
+                "guests": 2, "adults": 2, "children": 0,
+                "budget_gbp": budget_hint,
+            },
+            "destinations": picked,
+            "summary": summary,
+            "suggestions": [
+                {"rank": i+1, "destination": d,
+                 "info": DEST_INFO.get(d, {})}
+                for i, d in enumerate(picked)
+            ],
+            "is_suggestions": True,
+            "total_cost_gbp": 0,
+            "recommendations": {"flights": [], "hotels": [], "experiences": []},
+            "confidence_scores": {
+                "intent": 0.85, "rag": 0.80, "gds": 0.80,
+                "hallucination": 0.90, "overall": 0.83
+            },
+        }
