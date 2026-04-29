@@ -510,13 +510,11 @@ function _renderSuggestions(text, suggestions) {
   // Convert **bold** and numbered lists to HTML
   const html = text
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/
+    // Fixed: Escaped the newline characters and handled potential list items
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n(\d+)\. /g, '</p><p class="sug-item">$1. ')
+    .replace(/\n/g, '<br>');
 
-/g, '</p><p>')
-    .replace(/
-(\d+)\. /g, '</p><p class="sug-item">$1. ')
-    .replace(/
-/g, '<br>');
   return `<div class="suggestion-card">
     <div class="sug-header">✈ Destination Suggestions</div>
     <div class="sug-body"><p>${html}</p></div>
@@ -527,4 +525,3 @@ function _renderSuggestions(text, suggestions) {
     </div>
   </div>`;
 }
-
