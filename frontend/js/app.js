@@ -517,20 +517,40 @@ window.modifyTrip      = modifyTrip;
 document.addEventListener('DOMContentLoaded', init);
 
 function _renderSuggestions(text, suggestions) {
-  // Convert **bold** and numbered lists to HTML
-  const html = text
+  // Convert markdown to HTML
+  let html = text
     .replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>')
+    .replace(/_([^_]+)_/g, '<em>$1</em>')
+    .replace(/✦/g, '<span style="color:var(--teal)">✦</span>')
     .replace(/\n\n/g, '</p><p>')
-    .replace(/\n(\d+)\. /g, '</p><p class="sug-item">$1. ')
+    .replace(/\n(\d+)\. /g, '</p><p class="sug-item" onclick="window._pickSuggestion(this)">'
+                              + '<span class="sug-num">$1</span> ')
+    .replace(/\n📅/g, '<br><span style="color:var(--dim);font-size:11px">📅')
+    .replace(/  ·  💷/g, ' &nbsp;·&nbsp; 💷')
     .replace(/\n/g, '<br>');
+
   return `<div class="suggestion-card">
-    <div class="sug-header">✈ Destination Suggestions</div>
+    <div class="sug-header">
+      <span>✈ Destination Suggestions</span>
+      <span style="font-size:11px;font-weight:400;color:var(--muted)">powered by AI</span>
+    </div>
     <div class="sug-body"><p>${html}</p></div>
     <div class="sug-footer">
       <span style="color:var(--dim);font-size:11px">
-        Reply with the destination name or number to get a full itinerary
+        Tap a destination or reply with its name or number for a full itinerary
       </span>
     </div>
   </div>`;
 }
+
+window._pickSuggestion = function(el) {
+  // Extract the text content and send it as a message
+  const text = el.textContent.trim();
+  const ta = document.getElementById('messageInput');
+  if (ta && text) {
+    ta.value = text;
+    ta.dispatchEvent(new Event('input'));
+    ta.focus();
+  }
+};
 

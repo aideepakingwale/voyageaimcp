@@ -239,155 +239,109 @@ class TemplateProvider(BaseProvider):
         }
 
     def _is_vague_request(self, prompt: str) -> bool:
-        """Detect if the user wants suggestions rather than a specific trip."""
+        """
+        Detect any query where the user is asking for destination ideas
+        rather than a specific trip to a known destination.
+
+        We detect INTENT, not just keywords. Any of these qualify:
+          - Thematic: "holy places", "beach holiday", "adventure", "foodie trip"
+          - Regional: "somewhere in Asia", "European city break", "from India"
+          - Sentiment: "somewhere relaxing", "off the beaten track", "like Bali"
+          - Activity: "yoga retreat", "safari", "ski holiday", "pilgrimage"
+          - Open: "where should we go", "suggest somewhere", "any ideas"
+        """
         import re
-        p = prompt.lower()
-        # Must NOT already have a specific destination or city code
-        has_specific = bool(re.search(
-            r'\b(to|visit|fly to|going to|trip to|holiday in|in)\s+[A-Z][a-z]{3}', prompt))
-        if has_specific:
-            return False
-        vague_patterns = [
-            r'somewhere (warm|hot|sunny|tropical|exotic|relaxing|nice)',
-            r'(beach|ski|city|cultural|adventure|luxury|family|romantic|couple)\s+holiday',
-            r'(beach|ski|city|cultural|adventure|luxury|family|romantic)\s+destination',
-            r'(europe|asia|caribbean|mediterranean|tropical)\s+(beach|holiday|trip|destination)',
-            r'suggestions?\s+for',
-            r'recommend\s+(a|some|me)',
-            r'where\s+should\s+(i|we)\s+go',
-            r'where\s+can\s+(i|we)\s+go',
-            r'what\s+(destination|place)s?\s+(would|do you)',
-            r'any\s+(good|great|nice)\s+(ideas?|suggestions?|places?)',
-            r'not sure where',
-            r'help me (choose|decide|pick)',
-            r'options? for',
-            r'alternatives? to',
+        p = prompt.lower().strip()
+
+        # A request is SPECIFIC (not vague) only if it names a clear destination
+        # with a concrete action — e.g. "plan a trip to Seychelles", "book Dubai"
+        SPECIFIC_PATTERNS = [
+            r'(?:plan|book|fly|travel|go)\s+(?:a\s+trip\s+)?to\s+[A-Za-z]{4}',
+            r'(?:holiday|trip|vacation)\s+(?:in|at)\s+[A-Za-z]{4}',
+            r'(?:visit|see)\s+[A-Z][a-z]{4}',  # capitalized city name with action
         ]
-        return any(re.search(p_re, p) for p_re in vague_patterns)
+        # Check all specific patterns — if strongly specific, return False
+        for pat in SPECIFIC_PATTERNS:
+            if re.search(pat, prompt):
+                # But still catch thematic queries that mention a country broadly
+                # e.g. "holy places from India" — India is a country not a specific city
+                if not any(kw in p for kw in [
+                    'place', 'places', 'site', 'sites', 'destination', 'destinations',
+                    'option', 'options', 'suggest', 'recommend', 'best', 'top',
+                    'idea', 'ideas', 'where', 'what', 'type', 'kind', 'style',
+                    'holiday', 'retreat', 'tour', 'journey', 'pilgrimage', 'experience',
+                ]):
+                    return False
+
+        # Any query that is asking FOR suggestions (not naming a specific destination)
+        SUGGESTION_SIGNALS = [
+            # Explicit suggestion requests
+            r'suggest|recommend|advise|propose',
+            r'any\s+(?:good|great|nice|interesting)\s+(?:place|destination|idea)',
+            r'where\s+(?:should|can|could|would)\s+(?:i|we)\s+go',
+            r'what\s+(?:place|destination|country|city)',
+            r'help\s+me\s+(?:choose|decide|pick|find)',
+            r'looking\s+for\s+(?:a|some|an)',
+            r'options?\s+for',
+            r'best\s+(?:place|destination)s?\s+(?:for|to|in)',
+            r'top\s+(?:place|destination)s?',
+            r'not\s+sure\s+where',
+
+            # Thematic / activity-based (NOT naming a specific city)
+            r'(?:beach|ski|city|mountain|island|jungle|desert|lake|river)\s+(?:holiday|trip|vacation|break|getaway)',
+            r'(?:adventure|cultural|luxury|budget|family|romantic|solo|couples?)\s+(?:holiday|trip|travel|destination)',
+            r'(?:spiritual|religious|holy|sacred|pilgrimage|meditation|yoga|wellness)\s+(?:place|trip|travel|retreat|journey|tour|destination)',
+            r'(?:food|culinary|gastronomy|foodie)\s+(?:destination|trip|tour|capital)',
+            r'(?:safari|wildlife|nature|eco)\s+(?:trip|holiday|destination|tour)',
+            r'(?:historic|heritage|cultural|ancient)\s+(?:site|place|destination)',
+
+            # Emotional / sentiment-based queries
+            r'somewhere\s+(?:warm|hot|cold|exotic|peaceful|relaxing|exciting|different|new|unique|quiet|busy|lively)',
+            r'place\s+(?:like|similar\s+to|instead\s+of)',
+            r'(?:less\s+touristy|off\s+the\s+beaten\s+track|hidden\s+gem)',
+            r'(?:budget|cheap|affordable|luxury|expensive|splurge)',
+
+            # Country/region as theme (not specific city)
+            r'(?:in|from|across)\s+(?:india|europe|asia|africa|americas?|caribbean|oceania|middle\s+east)',
+            r'(?:india|indian|european|asian|african|latin)\s+(?:place|destination|site|experience)',
+
+            # Open-ended queries
+            r'where\s+(?:to|for)\s+(?:a|our|my)',
+            r'(?:good|great|perfect|ideal)\s+(?:place|destination)\s+(?:for|to)',
+            r'(?:place|destination)s?\s+to\s+(?:visit|see|explore|experience)',
+        ]
+        return any(re.search(pat, p) for pat in SUGGESTION_SIGNALS)
 
     def _build_suggestions(self, prompt: str) -> dict:
-        """Build destination suggestions for vague/open-ended requests."""
-        import re, random
-        p = prompt.lower()
-
-        # Detect theme
-        themes = {
-            'beach':     ('beach', ['Algarve','Santorini','Maldives','Bali','Seychelles',
-                                    'Barbados','Mauritius','Phuket','Dubrovnik','Malta']),
-            'ski':       ('ski',   ['Chamonix','Verbier',"Val d'Isere",'Zermatt',
-                                    'Innsbruck','Aspen','Niseko','Val Thorens']),
-            'city':      ('city break', ['Rome','Barcelona','Tokyo','New York','Paris',
-                                          'Amsterdam','Lisbon','Prague','Marrakech','Dubai']),
-            'cultural':  ('cultural', ['Kyoto','Istanbul','Cairo','Rome','Marrakech',
-                                        'Petra','Athens','Mexico City','Varanasi','Cartagena']),
-            'luxury':    ('luxury', ['Maldives','Seychelles','Bora Bora','Amalfi Coast',
-                                      'Santorini','Dubai','Mauritius','St Barts','Mykonos']),
-            'family':    ('family', ['Tenerife','Mallorca','Gran Canaria','Cyprus','Malta',
-                                      'Orlando','Bali','Thailand','Portugal','Greece']),
-            'romantic':  ('romantic', ['Santorini','Venice','Maldives','Bali','Tuscany',
-                                        'Paris','Seychelles','Amalfi','Bora Bora','Kyoto']),
-            'adventure': ('adventure', ['New Zealand','Costa Rica','Nepal','Patagonia',
-                                          'Iceland','Tanzania','Peru','Vietnam','Jordan']),
-            'europe':    ('European', ['Santorini','Dubrovnik','Algarve','Amalfi Coast',
-                                         'Barcelona','Mallorca','Malta','Montenegro']),
-            'caribbean': ('Caribbean', ['Barbados','St Lucia','Turks & Caicos',
-                                          'Antigua','Jamaica','Grenada','Anguilla']),
-            'asia':      ('Asian', ['Bali','Thailand','Vietnam','Japan','Singapore',
-                                     'Sri Lanka','Maldives','Cambodia','Malaysia']),
-        }
-
-        theme_key, theme_label, destinations = 'beach', 'beach', [
-            'Algarve','Santorini','Maldives','Bali','Seychelles'
-        ]
-        for key, (label, dests) in themes.items():
-            if key in p or label.lower() in p:
-                theme_key, theme_label, destinations = key, label, dests
-                break
-
-        # Budget hints from prompt
-        budget_hint = 3000
-        bm = re.search(r'£(\d[\d,]*)', prompt)
-        if bm: budget_hint = int(bm.group(1).replace(',',''))
-
-        # Pick 3 distinct destinations
-        picked = random.sample(destinations[:8], min(3, len(destinations)))
-
-        DEST_INFO = {
-            'Algarve':       {'code':'FAO','cc':'PT','time':'May–Oct','price':1400},
-            'Santorini':     {'code':'JTR','cc':'GR','time':'May–Sep','price':2200},
-            'Maldives':      {'code':'MLE','cc':'MV','time':'Nov–Apr','price':3800},
-            'Bali':          {'code':'DPS','cc':'ID','time':'Apr–Oct','price':2800},
-            'Seychelles':    {'code':'SEZ','cc':'SC','time':'Apr–May','price':4200},
-            'Barbados':      {'code':'BGI','cc':'BB','time':'Dec–May','price':3200},
-            'Mauritius':     {'code':'MRU','cc':'MU','time':'May–Nov','price':3500},
-            'Phuket':        {'code':'HKT','cc':'TH','time':'Nov–Apr','price':2400},
-            'Dubrovnik':     {'code':'DBV','cc':'HR','time':'Jun–Sep','price':1800},
-            'Malta':         {'code':'MLA','cc':'MT','time':'May–Oct','price':1200},
-            'Rome':          {'code':'FCO','cc':'IT','time':'Apr–Jun','price':1500},
-            'Barcelona':     {'code':'BCN','cc':'ES','time':'May–Sep','price':1600},
-            'Tokyo':         {'code':'NRT','cc':'JP','time':'Mar–May','price':3200},
-            'Paris':         {'code':'CDG','cc':'FR','time':'year-round','price':1400},
-            'Amsterdam':     {'code':'AMS','cc':'NL','time':'Apr–Aug','price':1300},
-            'Lisbon':        {'code':'LIS','cc':'PT','time':'Apr–Oct','price':1200},
-            'Prague':        {'code':'PRG','cc':'CZ','time':'Apr–Sep','price':1100},
-            'Marrakech':     {'code':'RAK','cc':'MA','time':'Mar–May','price':900},
-            'Dubai':         {'code':'DXB','cc':'AE','time':'Nov–Mar','price':2500},
-            'Mykonos':       {'code':'JMK','cc':'GR','time':'Jun–Sep','price':2400},
-            'Tenerife':      {'code':'TFS','cc':'ES','time':'year-round','price':1600},
-            'Mallorca':      {'code':'PMI','cc':'ES','time':'May–Oct','price':1500},
-            'Gran Canaria':  {'code':'LPA','cc':'ES','time':'year-round','price':1600},
-            'Cyprus':        {'code':'LCA','cc':'CY','time':'May–Oct','price':1400},
-            'Bora Bora':     {'code':'BOB','cc':'PF','time':'May–Oct','price':6500},
-            'Iceland':       {'code':'KEF','cc':'IS','time':'Jun–Aug','price':2800},
-            'New Zealand':   {'code':'AKL','cc':'NZ','time':'Dec–Feb','price':4500},
-            'Vietnam':       {'code':'SGN','cc':'VN','time':'Dec–Apr','price':2200},
-            'Sri Lanka':     {'code':'CMB','cc':'LK','time':'Dec–Mar','price':2600},
-            'St Lucia':      {'code':'UVF','cc':'LC','time':'Jan–Jun','price':3400},
-            'Montenegro':    {'code':'TGD','cc':'ME','time':'Jun–Sep','price':1600},
-            'Amalfi Coast':  {'code':'NAP','cc':'IT','time':'May–Sep','price':2800},
-        }
-
-        option_lines = []
-        first_dest = picked[0] if picked else 'Seychelles'
-        for i, dest in enumerate(picked, 1):
-            info = DEST_INFO.get(dest, {'code':'LIS','cc':'PT','time':'year-round','price':2000})
-            pprice = info['price']
-            option_lines.append(
-                f"{i}. **{dest}** — best {info['time']}. "
-                f"Estimated ~£{pprice:,} per person."
+        """
+        Delegate ALL suggestion generation to the LLM.
+        The LLM uses its full world knowledge — no hardcoded destination lists.
+        It understands any natural language: emotions, themes, activities, regions.
+        """
+        try:
+            from reasoning.llm_destination_suggester import suggest_destinations_with_llm
+            result = suggest_destinations_with_llm(
+                query=prompt,
+                customer_profile=None,
+                conversation_history=None,
+                last_itinerary=None,
             )
-
-        option_text = '\n'.join(option_lines)
-        summary = (
-            f"Here are 3 great {theme_label} options that match your profile:\n\n"
-            f"{option_text}\n\n"
-            f"Which would you like me to build a full itinerary for? "
-            f"Just say the number or destination name."
-        )
-
-        first_info = DEST_INFO.get(first_dest, {'code':'LIS','cc':'PT'})
+            if result and result.get("suggestions"):
+                return result
+        except Exception as e:
+            import logging
+            logging.getLogger("voyageai.llm").debug("LLM suggester error: %s", e)
 
         return {
-            "intent": {
-                "destination":  first_dest,
-                "city_code":    first_info['code'],
-                "country_code": first_info['cc'],
-                "dates": {"departure_date": None, "return_date": None, "nights": 7},
-                "guests": 2, "adults": 2, "children": 0,
-                "budget_gbp": budget_hint,
-            },
-            "destinations": picked,
-            "summary": summary,
-            "suggestions": [
-                {"rank": i+1, "destination": d,
-                 "info": DEST_INFO.get(d, {})}
-                for i, d in enumerate(picked)
-            ],
-            "is_suggestions": True,
-            "total_cost_gbp": 0,
-            "recommendations": {"flights": [], "hotels": [], "experiences": []},
-            "confidence_scores": {
-                "intent": 0.85, "rag": 0.80, "gds": 0.80,
-                "hallucination": 0.90, "overall": 0.83
-            },
+            "is_suggestions":  True,
+            "summary":         ("I'd love to help! Could you tell me a bit more about "
+                                "the kind of experience you're after? "
+                                "For example: relaxing beach, spiritual journey, adventure, "
+                                "cultural immersion, food and wine, family fun…"),
+            "suggestions":     [],
+            "intent":          {"destination":"","city_code":"","dates":{},"guests":2,"budget_gbp":3000},
+            "destinations":    [],
+            "total_cost_gbp":  0,
+            "recommendations": {"flights":[],"hotels":[],"experiences":[]},
+            "confidence_scores": {"overall": 0.70},
         }
