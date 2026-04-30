@@ -76,15 +76,28 @@ export async function renderItineraryCard(out, conf, actionCheck, meta, rawData 
   }
 
   // Build visa panel from MCP data (always, even without login)
-  const visaSource  = mcp_data?.visa?.data ?? null;
-  const visaPassport = customer?.profile?.name
-    ? `${customer.profile.name.split(' ')[0]}'s passport`
-    : 'Your passport';
-  visaHTML = buildVisaPanel(
-    visaSource,
-    visaPassport,
-    intent.destination || 'your destination'
-  );
+  let visaSource  = null;
+  let visaPassport = 'Your passport';
+  try {
+    visaSource   = mcp_data?.visa?.data ?? null;
+    visaPassport = customer?.profile?.name
+      ? `${customer.profile.name.split(' ')[0]}'s passport`
+      : 'Your passport';
+    visaHTML = buildVisaPanel(
+      visaSource,
+      visaPassport,
+      intent.destination || 'your destination'
+    );
+  } catch (e) {
+    visaHTML = '';
+  }
+
+  // Ensure safe defaults for all fields before render
+  if (!out.loyalty_benefits)    out.loyalty_benefits    = [];
+  if (!out.recommendations)     out.recommendations     = {};
+  if (!out.recommendations.flights)     out.recommendations.flights     = [];
+  if (!out.recommendations.hotels)      out.recommendations.hotels      = [];
+  if (!out.recommendations.experiences) out.recommendations.experiences = [];
 
   const html = _buildCard({
     out, conf, actionCheck, meta,
