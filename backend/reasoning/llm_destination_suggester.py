@@ -166,41 +166,168 @@ def suggest_destinations_with_llm(
 
 
 def _parse_suggestions(text: str) -> list | None:
-    """Parse LLM response into list of suggestion dicts."""
-    try:
-        # Strip markdown fences
-        text = text.strip()
-        if "```" in text:
-            parts = text.split("```")
-            text = parts[1] if len(parts) >= 3 else text
-            if text.startswith("json"):
-                text = text[4:]
-        text = text.strip()
+    """
+    Parse LLM response into list of suggestion dicts.
+    Handles: well-formed JSON array, partial JSON, plain string arrays,
+    itinerary responses that look like suggestions, and everything in between.
+    """
+    if not text or not text.strip():
+        return None
 
-        # Find JSON array
+    # Strip markdown fences
+    text = text.strip()
+    if "```" in text:
+        parts = text.split("```")
+        text = parts[1] if len(parts) >= 3 else text
+        if text.lower().startswith("json"):
+            text = text[4:]
+    text = text.strip()
+
+    # ── Attempt 1: well-formed JSON array of objects ──────────
+    try:
         start = text.find("[")
         end   = text.rfind("]")
         if start != -1 and end != -1:
-            text = text[start:end+1]
+            candidate = text[start:end+1]
+            data = json.loads(candidate)
+            if isinstance(data, list) and len(data) >= 1:
+                # Check if it's an array of objects (proper suggestions)
+                if isinstance(data[0], dict) and data[0].get("destination"):
+                    return _validate_suggestions(data)
+                # Array of strings like ["Dubai","Bali"] — convert to minimal dicts
+                if isinstance(data[0], str):
+                    return _strings_to_suggestions(data)
+    except json.JSONDecodeError:
+        pass
 
-        data = json.loads(text)
-        if isinstance(data, list) and len(data) >= 1:
-            # Validate each suggestion has minimum fields
-            valid = []
-            for item in data[:3]:
-                if item.get("destination") and item.get("iata"):
-                    # Ensure IATA is uppercase and exactly 3 letters
-                    iata = str(item["iata"]).upper().strip()
-                    if not re.match(r"^[A-Z]{3}$", iata):
-                        # Try to extract 3-letter code from the field
-                        match = re.search(r"\b([A-Z]{3})\b", iata)
-                        iata  = match.group(1) if match else "UNK"
-                    item["iata"] = iata
-                    valid.append(item)
-            return valid if valid else None
-    except Exception as e:
-        log.debug("Suggestion parse error: %s | text: %s", e, text[:100])
+    # ── Attempt 2: strip trailing garbage and retry ───────────
+    try:
+        # The LLM often returns ["Dubai"], "extra text..."
+        # Find the FIRST complete JSON object or array
+        for pattern in [
+            r'\[\s*\{[\s\S]*?\}\s*(?:,\s*\{[\s\S]*?\})*\s*\]',  # [{...},{...}]
+            r'\{[\s\S]*?"destination"[\s\S]*?\}',                         # single {...}
+        ]:
+            m = re.search(pattern, text)
+            if m:
+                fragment = m.group(0)
+                # Wrap single object in array
+                if fragment.startswith("{"):
+                    fragment = "[" + fragment + "]"
+                data = json.loads(fragment)
+                if isinstance(data, list) and len(data) >= 1:
+                    valid = _validate_suggestions(data)
+                    if valid:
+                        return valid
+    except Exception:
+        pass
+
+    # ── Attempt 3: extract destinations from any text ─────────
+    # The LLM may have generated an itinerary instead of suggestions
+    # Look for destination names we can recognise
+    try:
+        extracted = _extract_destinations_from_text(text)
+        if extracted:
+            return extracted
+    except Exception:
+        pass
+
+    log.debug("Suggestion parse failed entirely | text: %s", text[:120])
     return None
+
+
+def _validate_suggestions(data: list) -> list:
+    """Validate and clean a list of suggestion dicts."""
+    valid = []
+    for item in data[:3]:
+        if not isinstance(item, dict):
+            continue
+        # Must have destination name
+        dest = item.get("destination") or item.get("city") or item.get("name")
+        if not dest:
+            continue
+        item["destination"] = dest
+        # Resolve/validate IATA
+        iata = str(item.get("iata","")).upper().strip()
+        if not re.match(r"^[A-Z]{3}$", iata):
+            m    = re.search(r"\b([A-Z]{3})\b", iata)
+            iata = m.group(1) if m else _quick_iata(dest)
+        item["iata"] = iata
+        # Ensure required display fields exist
+        item.setdefault("tagline",           f"Explore {dest}")
+        item.setdefault("why_this_fits",     "")
+        item.setdefault("highlights",        [])
+        item.setdefault("best_time",         "Year-round")
+        item.setdefault("budget_pp_gbp",     2500)
+        item.setdefault("duration_suggestion","7 nights")
+        item.setdefault("country",           "")
+        valid.append(item)
+    return valid or None
+
+
+def _strings_to_suggestions(strings: list) -> list:
+    """Convert a plain list of destination name strings to suggestion dicts."""
+    result = []
+    for name in strings[:3]:
+        if not isinstance(name, str) or len(name) < 2:
+            continue
+        iata = _quick_iata(name)
+        result.append({
+            "destination":       name.strip().title(),
+            "country":           "",
+            "iata":              iata or "UNK",
+            "tagline":           f"Explore {name.strip().title()}",
+            "why_this_fits":     "",
+            "highlights":        [],
+            "best_time":         "Year-round",
+            "budget_pp_gbp":     2500,
+            "duration_suggestion":"7 nights",
+        })
+    return result or None
+
+
+def _extract_destinations_from_text(text: str) -> list | None:
+    """Last resort: find destination names in any free text."""
+    from reasoning.context_engine import resolve_destination
+    # Look for lines starting with numbers (1. Dubai, 2. Bali etc.)
+    numbered = re.findall(r"(?:^|\n)\s*\d+\.\s*[*]*([A-Z][\w\s,]+)", text)
+    # Also look for bold **Destination** patterns
+    bolded   = re.findall(r"\*\*([A-Z][\w\s]+)\*\*", text)
+    candidates = (numbered + bolded)[:6]
+
+    result = []
+    seen   = set()
+    for name in candidates:
+        name = name.strip().split(",")[0].strip()  # "Dubai, UAE" -> "Dubai"
+        if not name or name in seen or len(name) < 3:
+            continue
+        city, iata = resolve_destination(name)
+        if iata:
+            seen.add(name)
+            result.append({
+                "destination":       city or name,
+                "country":           "",
+                "iata":              iata,
+                "tagline":           f"Explore {city or name}",
+                "why_this_fits":     "",
+                "highlights":        [],
+                "best_time":         "Year-round",
+                "budget_pp_gbp":     2500,
+                "duration_suggestion":"7 nights",
+            })
+        if len(result) >= 3:
+            break
+    return result or None
+
+
+def _quick_iata(city: str) -> str:
+    """Quick IATA lookup for a city name string."""
+    try:
+        from reasoning.context_engine import resolve_destination
+        _, iata = resolve_destination(city)
+        return iata or "UNK"
+    except Exception:
+        return "UNK"
 
 
 def _build_summary(query: str, suggestions: list) -> str:
