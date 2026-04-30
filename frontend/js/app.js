@@ -617,23 +617,62 @@ function _renderSuggestions(text, suggestions) {
 }
 
 window._pickSuggestion = function(el) {
-  // Find the destination name from data attribute or text content
-  const dest   = el.dataset.destination || el.querySelector('.sug-name strong')?.textContent || el.textContent.trim();
-  const number = el.dataset.number || '';
+  // Get destination name and iata from the card
+  const dest = el.dataset.destination
+             || el.querySelector('.sug-name strong')?.textContent?.trim()
+             || el.textContent.trim();
+  if (!dest) return;
 
-  // Send the destination name directly as a chat message (auto-submit)
-  if (dest) {
-    const message = dest; // send just the destination name — cleaner than number
-    const ta = document.getElementById('messageInput');
-    if (ta) {
-      ta.value = message;
-      ta.dispatchEvent(new Event('input'));
-    }
-    // Auto-send after a short delay so user sees it in the input
-    setTimeout(() => {
-      const sendBtn = document.getElementById('sendBtn');
-      if (sendBtn) sendBtn.click();
-    }, 150);
+  // Build a complete, context-rich prompt so no further questions are needed
+  const customer  = state.getCurrentCustomer();
+  const profile   = customer?.profile || {};
+  const patterns  = customer?.patterns || {};
+  const loyalty   = customer?.loyalty  || {};
+  const interests = (customer?.interests?.top || []).join(', ');
+
+  // Pull typical trip parameters from customer profile
+  const nights    = patterns.typical_nights    || profile.typical_nights    || 7;
+  const budget    = patterns.typical_budget_gbp|| profile.typical_budget_gbp|| 3000;
+  const adults    = profile.adults_in_family   || 2;
+  const children  = profile.children_in_family || 0;
+  const guests    = adults + children;
+  const style     = profile.travel_style       || 'leisure';
+  const tier      = loyalty.current_tier       || 'Blue';
+
+  // Build guest string
+  const guestStr  = children > 0
+    ? `${adults} adults and ${children} children (family of ${guests})`
+    : `${guests} adults`;
+
+  // Build interest phrase
+  const interestStr = interests
+    ? `My travel interests include: ${interests}.`
+    : '';
+
+  // Build complete prompt — no clarifying questions needed
+  const parts = [
+    `Plan a trip to ${dest} for ${guestStr}.`,
+    budget  ? `My typical trip budget is around £${budget.toLocaleString()}.` : '',
+    nights  ? `My typical trip is around ${nights} nights.` : '',
+    style   ? `I am a ${style} traveller.` : '',
+    interestStr,
+    tier !== 'Blue' ? `I am a ${tier} loyalty member — please include any relevant member benefits.` : '',
+    children > 0  ? `We are travelling with ${children} children — please suggest family-friendly hotels and activities.` : '',
+    'Please build me a complete personalised itinerary.',
+  ].filter(Boolean).join(' ');
+
+  const ta = document.getElementById('messageInput');
+  if (ta) {
+    ta.value = parts;
+    ta.dispatchEvent(new Event('input'));
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   }
+
+  // Auto-send immediately — all context is in the prompt
+  setTimeout(() => {
+    const sendBtn = document.getElementById('sendBtn');
+    if (sendBtn) sendBtn.click();
+  }, 80);
 };
 
