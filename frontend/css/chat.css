@@ -191,3 +191,99 @@
   padding:     8px 16px 12px;
   border-top:  1px solid var(--border);
 }
+
+/* ── Suggestion Cards v2 ─────────────────────────────────── */
+.suggestion-card {
+  background:    var(--bg2);
+  border:        1px solid rgba(0,201,167,.3);
+  border-radius: var(--radius, 12px);
+  overflow:      hidden;
+  max-width:     540px;
+  margin:        8px 0;
+}
+.sug-header {
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+  padding:         10px 16px;
+  background:      rgba(0,201,167,.08);
+  border-bottom:   1px solid rgba(0,201,167,.15);
+  font-weight:     700;
+  font-size:       13px;
+  color:           var(--teal);
+}
+.sug-body { padding: 8px 0; }
+
+/* Each suggestion row — FULLY clickable block */
+.sug-item {
+  display:       flex;
+  align-items:   flex-start;
+  gap:           12px;
+  padding:       12px 16px;
+  cursor:        pointer;
+  border-bottom: 1px solid var(--border, rgba(255,255,255,.06));
+  transition:    background .15s, transform .1s;
+  user-select:   none;
+}
+.sug-item:last-child { border-bottom: none; }
+.sug-item:hover  { background: rgba(0,201,167,.1); }
+.sug-item:active { background: rgba(0,201,167,.18); transform: scale(.99); }
+
+.sug-num {
+  min-width:     26px;
+  height:        26px;
+  background:    var(--teal);
+  color:         #040C18;
+  border-radius: 50%;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  font-weight:   800;
+  font-size:     12px;
+  flex-shrink:   0;
+  margin-top:    2px;
+}
+.sug-content { flex: 1; min-width: 0; }
+.sug-name    { font-size: 14px; margin-bottom: 3px; }
+.sug-country { color: var(--muted); font-weight: 400; }
+.sug-tagline {
+  font-size:  12px;
+  color:      var(--muted);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.sug-highlights {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       4px;
+  margin:    4px 0;
+}
+.sug-hl {
+  font-size:     11px;
+  color:         var(--teal);
+  background:    rgba(0,201,167,.08);
+  padding:       2px 7px;
+  border-radius: 10px;
+}
+.sug-meta {
+  font-size:  11px;
+  color:      var(--dim, rgba(255,255,255,.35));
+  margin-top: 4px;
+}
+.sug-arrow {
+  color:      var(--teal);
+  font-size:  18px;
+  flex-shrink: 0;
+  opacity:    0.6;
+  align-self: center;
+  transition: opacity .15s, transform .15s;
+}
+.sug-item:hover .sug-arrow {
+  opacity:   1;
+  transform: translateX(3px);
+}
+.sug-footer {
+  padding:     8px 16px 12px;
+  border-top:  1px solid var(--border, rgba(255,255,255,.06));
+  text-align:  center;
+}

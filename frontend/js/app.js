@@ -332,138 +332,109 @@ async function send() {
 // ── Response handler ──────────────────────────────────────────
 
 async function _handleResponse(data) {
-  if (!data) { appendAI('⚠️ Empty response.'); return; }
+  // Guard: always show something, never go blank
+  if (!data) { appendAI('No response from server. Please try again.'); return; }
 
-  const state_val = data.conversation_state || data.status;
+  const status = data.status || '';
+  const out    = data.llm_output || {};
 
-  // ── Clarification question ────────────────────────────────
-  if (data.status === 'clarifying') {
-    const modType = data.modification_type || '';
-    const icon    = { dates:'📅', guests:'👥', hotel:'🏨', flight:'✈️', budget:'💷' }[modType] || '✏️';
-    appendAI(`${icon} <strong>${data.message}</strong>`);
+  // ── Simple status responses ──────────────────────────────
+  if (status === 'clarifying') {
+    const icons = {dates:'📅',guests:'👥',hotel:'🏨',flight:'✈️',budget:'💷',destination:'📍'};
+    const icon  = icons[data.modification_type] || '✏️';
+    appendAI(`${icon} <strong>${data.message || 'Could you give me more details?'}</strong>`);
     return;
   }
-
-  // ── Plan cancelled ────────────────────────────────────────
-  if (data.status === 'cancelled') {
+  if (status === 'cancelled') {
     appendAI(`🗑️ <strong style="color:var(--amber)">Plan cancelled.</strong><br>
-      <span style="color:var(--muted)">Where would you like to go?</span>`);
+      <span style="color:var(--muted)">Where would you like to go next?</span>`);
     return;
   }
-
-  // ── Plan confirmed ────────────────────────────────────────
-  if (data.status === 'confirmed') {
+  if (status === 'confirmed') {
     appendAI(`🎉 <strong style="color:var(--teal)">Booking Confirmed!</strong><br>
-      Reference: VGI-${state.getSessionId().toUpperCase()}<br>
-      <span style="color:var(--muted)">You'll receive a confirmation email shortly.</span>`);
+      Reference: VGI-${state.getSessionId().toUpperCase()}`);
     stopTimer();
     return;
   }
-
-  // ── Rejected ──────────────────────────────────────────────
-  if (data.status === 'rejected') {
-    appendAI(`🛡️ <strong style="color:var(--amber)">Blocked:</strong> ${data.message || data.reason}`);
+  if (status === 'rejected') {
+    appendAI(`🛡️ <strong style="color:var(--amber)">Blocked:</strong> ${data.message || data.reason || ''}`);
     return;
   }
-
-  // ── Session expired ───────────────────────────────────────
-  if (data.status === 'session_expired') {
-    state.setSessionId(data.session_id);
+  if (status === 'session_expired') {
+    if (data.session_id) state.setSessionId(data.session_id);
     stopTimer();
-    appendAI(`⏱️ ${data.message}`);
+    appendAI(`⏱️ ${data.message || 'Session expired.'}`);
     return;
   }
 
-  // ── Human handoff ─────────────────────────────────────────
-  if (data.status === 'human_handoff') {
-    appendAI(`🤝 <strong style="color:var(--amber)">Connecting to a specialist</strong><br>
-      <span style="color:var(--muted)">${data.message || 'AI could not complete this with sufficient confidence.'}</span><br><br>
-      💡 <em style="color:var(--dim)">Tip: Try being more specific — e.g. "Seychelles for 4 people, 2 weeks in October, £5000 budget"</em>`);
+  // ── Destination suggestions ──────────────────────────────
+  if (status === 'suggestions' || out.is_suggestions) {
+    const suggestions = data.suggestions || out.suggestions || [];
+    const summary     = data.summary     || out.summary     || 'Here are some options:';
+    appendAI(_renderSuggestions(summary, suggestions));
     return;
   }
 
-  // ── Modification result ───────────────────────────────────
-  if ((data.is_modification || data.conversation_state === 'modified') && data.llm_output) {
-    const out  = data.llm_output;
-    const conf = data.confidence || { overall: 0.88, passed: true };
+  // ── Human handoff ────────────────────────────────────────
+  if (status === 'human_handoff') {
+    appendAI(`🤝 <strong style="color:var(--amber)">Our specialists will assist you.</strong><br>
+      <span style="color:var(--muted)">The AI couldn't complete this with enough confidence. 
+      Try: <em>"Seychelles 2 adults 1 week October £4000"</em></span>`);
+    return;
+  }
+
+  // ── Any response with a valid itinerary ──────────────────
+  // Covers: ready, awaiting_confirmation, modified, planning
+  if (out.intent && out.recommendations) {
+    const conf = data.confidence  || { overall: 0.80, passed: true };
     const ac   = data.action_check || { passed: true, action: 'proceed' };
-    const meta = { p: data.llm_provider || 'conversation_engine',
-                   m: '', ms: data.elapsed_ms || 0, cost: 0 };
+    const meta = {
+      p:    data.llm_provider   || 'template',
+      m:    data.llm_model      || '',
+      ms:   data.elapsed_ms     || 0,
+      cost: data.llm_cost_usd   || 0,
+    };
 
-    const modType = data.modification_type || 'plan';
-    const icons   = { dates:'📅', guests:'👥', hotel:'🏨', flight:'✈️',
-                      budget:'💷', destination:'📍' };
-    const labels  = { dates:'Dates Updated', guests:'Guests Updated',
-                      hotel:'Hotel Updated', flight:'Flights Updated',
-                      budget:'Budget Updated', destination:'Destination Changed' };
-    const icon    = icons[modType]  || '✏️';
-    const label   = labels[modType] || 'Plan Updated';
-
-    // Show the summary message from backend
-    const summary = out.summary || `${icon} ${label}`;
-    appendAI(summary);
-
-    // Always re-render the full itinerary card with updated data
-    await renderItineraryCard(out, conf, ac, meta, data);
-
-    // Show version history if available
-    if (data.version_history && data.version_history.length > 1) {
-      const hist = data.version_history;
-      const timeline = hist.map((v, i) =>
-        `<span style="color:${i===hist.length-1 ? 'var(--teal)' : 'var(--dim)'}">
-          v${v.version} ${v.modification_type || 'initial'} £${Math.round(v.total_cost_gbp||0).toLocaleString()}
-         </span>`
-      ).join(' → ');
-      appendAI(`<small style="color:var(--dim)">Version history: ${timeline}</small>`);
-    }
-    return;
-  }
-
-  // ── Normal itinerary (plan / awaiting_confirmation / ready) ─
-  const out  = data.llm_output  || {};
-  const conf = data.confidence  || { overall: 0.80, passed: true };
-  const ac   = data.action_check || { passed: true, action: 'proceed' };
-  const meta = { p: data.llm_provider || 'template', m: data.llm_model || '',
-                 ms: data.elapsed_ms || 0, cost: data.llm_cost_usd || 0 };
-
-  // Any status that has a valid itinerary → render the card
-  const validStatuses = ['ready','awaiting_confirmation','planning','modified'];
-  const hasValidOutput = out.intent && out.recommendations;
-
-  if (hasValidOutput) {
-    // Show summary text if present
+    // Show text summary first
     if (out.summary) appendAI(out.summary);
+
+    // Render full card — catch any JS error and show text fallback
     try {
       await renderItineraryCard(out, conf, ac, meta, data);
-    } catch (renderErr) {
-      console.error('renderItineraryCard error:', renderErr);
-      // Fallback: show a simple text summary
-      const intent = out.intent || {};
-      const dates  = intent.dates || {};
-      const total  = out.total_cost_gbp || 0;
-      appendAI(
-        `<div style="padding:14px 18px;border:1px solid var(--teal);border-radius:10px;background:var(--bg2)">
-          <strong style="color:var(--teal)">✈ ${intent.destination || 'Trip'} Itinerary</strong><br>
-          <span style="color:var(--muted);font-size:13px">
-            ${dates.departure_date || ''} → ${dates.return_date || ''} · 
-            ${intent.guests || 2} guests · £${Math.round(total).toLocaleString()}<br>
-            <em>Tap "Confirm" to book this trip.</em>
-          </span>
-        </div>`
-      );
+    } catch (err) {
+      console.error('Card render error:', err);
+      const i = out.intent || {};
+      const d = i.dates   || {};
+      const t = out.total_cost_gbp || 0;
+      appendAI(`<div style="padding:14px;border:1px solid var(--teal);border-radius:10px;background:var(--bg2)">
+        <strong style="color:var(--teal)">✈ ${i.destination || 'Your Trip'}</strong><br>
+        <span style="color:var(--muted);font-size:13px">
+          ${d.departure_date || ''} → ${d.return_date || ''} &nbsp;·&nbsp;
+          ${i.guests || 2} guests &nbsp;·&nbsp; £${Math.round(t).toLocaleString()}<br>
+          <em style="color:var(--dim)">Reply "confirm" to book or ask to change anything.</em>
+        </span></div>`);
     }
-  } else if (out.summary) {
-    appendAI(out.summary);
-  } else if (data.status === 'human_handoff') {
-    appendAI(
-      '<div style="padding:12px 16px;border:1px solid var(--amber);border-radius:10px;'
-      + 'background:rgba(243,156,18,.06);">'
-      + '<strong style="color:var(--amber)">⚠ Could not build itinerary</strong><br>'
-      + '<span style="color:var(--muted);font-size:13px">'
-      + 'Please try again with more details, e.g.:<br>'
-      + '<em>"San Sebastián 4 people 9 nights August £4000"</em>'
-      + '</span></div>'
-    );
+
+    // Show modification version history
+    if (data.is_modification && data.version_history?.length > 1) {
+      const hist = data.version_history;
+      const tl = hist.map((v,i) =>
+        `<span style="color:${i===hist.length-1?'var(--teal)':'var(--dim)'}">
+          v${v.version} ${v.modification_type||'initial'} £${Math.round(v.total_cost_gbp||0).toLocaleString()}
+        </span>`).join(' → ');
+      appendAI(`<small style="color:var(--dim)">History: ${tl}</small>`);
+    }
+    return;
+  }
+
+  // ── Fallback: show whatever we have ─────────────────────
+  const msg = out.summary || data.message || data.reason || '';
+  if (msg) {
+    appendAI(msg);
+  } else {
+    // Absolute last resort — never go blank
+    appendAI(`<span style="color:var(--muted)">I couldn't build that itinerary. 
+      Try: <em>"Dubai 2 people 1 week November £3000"</em></span>`);
   }
 }
 
@@ -548,40 +519,121 @@ window.modifyTrip      = modifyTrip;
 document.addEventListener('DOMContentLoaded', init);
 
 function _renderSuggestions(text, suggestions) {
-  // Convert markdown to HTML
-  let html = text
-    .replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>')
-    .replace(/_([^_]+)_/g, '<em>$1</em>')
-    .replace(/✦/g, '<span style="color:var(--teal)">✦</span>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n(\d+)\. /g, '</p><p class="sug-item" onclick="window._pickSuggestion(this)">'
-                              + '<span class="sug-num">$1</span> ')
-    .replace(/\n📅/g, '<br><span style="color:var(--dim);font-size:11px">📅')
-    .replace(/  ·  💷/g, ' &nbsp;·&nbsp; 💷')
-    .replace(/\n/g, '<br>');
+  // Build suggestion cards from structured suggestions array when available
+  // Fall back to parsing the text string
+
+  let itemsHtml = '';
+
+  if (suggestions && suggestions.length > 0) {
+    // Render from structured data — each item is independently clickable
+    itemsHtml = suggestions.map((s, i) => {
+      const dest     = s.destination || '';
+      const country  = s.country     || '';
+      const tagline  = s.tagline     || s.why_this_fits || '';
+      const budget   = s.budget_pp_gbp;
+      const duration = s.duration_suggestion || '7 nights';
+      const best     = s.best_time   || '';
+      const highlights = (s.highlights || []).slice(0, 3);
+
+      let budgetStr = '';
+      if (budget) {
+        try {
+          const b = parseInt(String(budget).replace(/[^0-9]/g,''));
+          budgetStr = isNaN(b) ? '' : ` · ~£${b.toLocaleString()}/pp`;
+        } catch(e) {}
+      }
+
+      const hlHtml = highlights.length
+        ? `<div class="sug-highlights">${highlights.map(h =>
+            `<span class="sug-hl">✦ ${h}</span>`).join('')}</div>`
+        : '';
+
+      const metaLine = [best ? `📅 ${best}` : '', budgetStr ? `💷${budgetStr}` : '']
+        .filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+      return `<div class="sug-item" onclick="window._pickSuggestion(this)"
+                   data-destination="${dest}" data-number="${i+1}">
+        <div class="sug-num">${i + 1}</div>
+        <div class="sug-content">
+          <div class="sug-name"><strong>${dest}</strong>${country ? `, <span class="sug-country">${country}</span>` : ''}</div>
+          ${tagline ? `<div class="sug-tagline">${tagline}</div>` : ''}
+          ${hlHtml}
+          ${metaLine ? `<div class="sug-meta">${metaLine}</div>` : ''}
+        </div>
+        <div class="sug-arrow">→</div>
+      </div>`;
+    }).join('');
+  } else {
+    // Fallback: parse the text string into items
+    // Split on numbered lines: "1. Dest", "2. Dest", "3. Dest"
+    const lines = text.split(/\n/);
+    const items = [];
+    let current = null;
+
+    for (const line of lines) {
+      const numMatch = line.match(/^(\d+)\.\s+[*]*([^*\n]+)/);
+      if (numMatch) {
+        if (current) items.push(current);
+        current = { num: numMatch[1], name: numMatch[2].replace(/[*]/g,'').trim(), rest: [] };
+      } else if (current && line.trim()) {
+        current.rest.push(line.trim());
+      }
+    }
+    if (current) items.push(current);
+
+    if (items.length > 0) {
+      itemsHtml = items.map(item =>
+        `<div class="sug-item" onclick="window._pickSuggestion(this)"
+              data-destination="${item.name}" data-number="${item.num}">
+          <div class="sug-num">${item.num}</div>
+          <div class="sug-content">
+            <div class="sug-name"><strong>${item.name}</strong></div>
+            ${item.rest.length ? `<div class="sug-tagline">${item.rest.slice(0,2).join(' ')}</div>` : ''}
+          </div>
+          <div class="sug-arrow">→</div>
+        </div>`
+      ).join('');
+    } else {
+      // Plain text — no numbered items found
+      const escaped = text
+        .replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+      itemsHtml = `<div style="padding:8px 4px;color:var(--muted)">${escaped}</div>`;
+    }
+  }
 
   return `<div class="suggestion-card">
     <div class="sug-header">
       <span>✈ Destination Suggestions</span>
       <span style="font-size:11px;font-weight:400;color:var(--muted)">powered by AI</span>
     </div>
-    <div class="sug-body"><p>${html}</p></div>
+    <div class="sug-body">${itemsHtml}</div>
     <div class="sug-footer">
       <span style="color:var(--dim);font-size:11px">
-        Tap a destination or reply with its name or number for a full itinerary
+        Tap any destination to build a full personalised itinerary
       </span>
     </div>
   </div>`;
 }
 
 window._pickSuggestion = function(el) {
-  // Extract the text content and send it as a message
-  const text = el.textContent.trim();
-  const ta = document.getElementById('messageInput');
-  if (ta && text) {
-    ta.value = text;
-    ta.dispatchEvent(new Event('input'));
-    ta.focus();
+  // Find the destination name from data attribute or text content
+  const dest   = el.dataset.destination || el.querySelector('.sug-name strong')?.textContent || el.textContent.trim();
+  const number = el.dataset.number || '';
+
+  // Send the destination name directly as a chat message (auto-submit)
+  if (dest) {
+    const message = dest; // send just the destination name — cleaner than number
+    const ta = document.getElementById('messageInput');
+    if (ta) {
+      ta.value = message;
+      ta.dispatchEvent(new Event('input'));
+    }
+    // Auto-send after a short delay so user sees it in the input
+    setTimeout(() => {
+      const sendBtn = document.getElementById('sendBtn');
+      if (sendBtn) sendBtn.click();
+    }, 150);
   }
 };
 
