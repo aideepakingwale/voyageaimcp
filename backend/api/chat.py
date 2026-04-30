@@ -377,24 +377,32 @@ def _make_minimal_output(prompt: str, action: dict) -> dict:
 
 
 def _store_entities(session_id: str, action: dict):
-    """Store all extracted values in session."""
+    """Store all extracted values in session — only valid formats."""
+    import re as _re
+    def _valid_date(v):
+        """Only store as date if it looks like YYYY-MM-DD."""
+        return bool(_re.match(r"20\d\d-\d{2}-\d{2}", str(v))) if v else False
+
     MAP = {
-        "destination_iata":  "city_code",
-        "destination":       "destination",
-        "departure_date":    "departure_date",
-        "return_date":       "return_date",
-        "nights":            "nights",
-        "guests":            "guests",
-        "adults":            "adults",
-        "children":          "children",
-        "budget_gbp":        "budget_gbp",
-        "min_hotel_stars":   "min_hotel_stars",
-        "direct_flight":     "direct_flight",
+        "destination_iata": ("city_code",    None),
+        "destination":      ("destination",  None),
+        "departure_date":   ("departure_date",_valid_date),
+        "return_date":      ("return_date",   _valid_date),
+        "nights":           ("nights",        lambda v: isinstance(v,(int,float)) and v>0),
+        "guests":           ("guests",        lambda v: isinstance(v,(int,float)) and v>0),
+        "adults":           ("adults",        lambda v: isinstance(v,(int,float)) and v>0),
+        "children":         ("children",      lambda v: isinstance(v,(int,float)) and v>=0),
+        "budget_gbp":       ("budget_gbp",    lambda v: isinstance(v,(int,float)) and v>0),
+        "min_hotel_stars":  ("min_hotel_stars",None),
+        "direct_flight":    ("direct_flight", None),
     }
-    for src_key, entity_key in MAP.items():
+    for src_key, (entity_key, validator) in MAP.items():
         val = action.get(src_key)
-        if val is not None:
-            memory_store.store_entity(session_id, entity_key, val, 0.95)
+        if val is None:
+            continue
+        if validator and not validator(val):
+            continue  # skip invalid values (e.g. month name stored as return_date)
+        memory_store.store_entity(session_id, entity_key, val, 0.95)
 
 
 def _patch_plan(last: dict, action: dict) -> dict:

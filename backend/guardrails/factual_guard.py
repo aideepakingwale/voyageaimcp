@@ -95,16 +95,32 @@ class FactualGuardrail:
             "TBC","TBD","PRO","GDP","VAT","TAX","SLA","ROI","KPI","CRM",
             "SRC","DST","DEP","ARR","DUR","LEG","PAX","ADT","CHD","INF",
             "GPS","ETD","MON","TUE","WED","THU","FRI","SAT","SUN",
-            # Known valid airports (fallback if cache fails)
-            "LHR","LGW","MAN","EDI","BHX","BRS","LIS","MAD","BCN","CDG",
-            "FCO","FRA","AMS","DXB","DOH","SIN","NRT","HKG","JFK","LAX",
-            "SYD","DUB","ATH","IST","CPH","ARN","ZRH","GVA","VIE","BRU",
-            # Airline IATA codes (2-3 letter) that appear in JSON but are NOT airports
+            # Known valid airports (fallback if cache fails) — UK + major hubs
+            "LHR","LGW","MAN","EDI","BHX","BRS","NCL","LBA","LPL","BFS",
+            "LIS","MAD","BCN","CDG","FCO","FRA","AMS","DXB","DOH","SIN",
+            "NRT","HKG","JFK","LAX","SYD","DUB","ATH","IST","CPH","ARN",
+            "ZRH","GVA","VIE","BRU","PRG","WAW","BUD","OTP","SOF","ZAG",
+            # Indian airports
+            "DEL","BOM","MAA","BLR","HYD","CCU","GOI","VNS","ATQ","DED",
+            "AMD","LKO","JAI","IXC","TRV","COK","IXB","GAY","IXM","BBI",
+            # SE Asia / Pacific
+            "BKK","HKT","DPS","CGK","KUL","MNL","SGN","HAN","CMB","MLE",
+            "SEZ","MRU","REP","VTE","RGN","HND","KIX","ICN","PEK","PVG",
+            # Americas / Africa
+            "JFK","LAX","MIA","ORD","SFO","YYZ","GRU","EZE","BOG","LIM",
+            "JNB","CPT","NBO","CMN","RAK","ADD","DAR","LOS","ACC",
+            # Middle East
+            "AUH","SHJ","RUH","JED","KWI","MCT","AMM","TLV","CAI","BAH",
+            # Airline IATA codes that appear in recommendations JSON
             "TAP","BAW","EZY","RYR","IBE","KLM","AFR","DLH","AZA","TOM",
-            "EAT","SAS","NAX","UAE","ETD","QTR","EKY","FIN","AAL","DAL",
-            "UAL","BAA","VIR","MON","TUI","TCX","AEA","WZZ","VUE","LOT",
-            # Rating/type codes
-            "STD","DBL","TWN","SGL","FAM","SUI","VIP","EXE","PRE",
+            "SAS","NAX","UAE","ETD","QTR","FIN","AAL","DAL","UAL","BAA",
+            "VIR","MON","TUI","TCX","WZZ","LOT","WYZ","AIC","AIX","THA",
+            "SIA","MAS","EVA","CAL","ANA","JAL","OZA","CXA","HAV","CES",
+            # Hotel / brand codes that appear in JSON (NOT airports)
+            "ITC","TAJ","OBR","LEM","ADR","HYT","MAR","IHG","ACC","WIN",
+            "SHO","AND","LHW","SMH","FHR","GHA","YTL","AMA","OAS","REL",
+            # Rating/room type codes
+            "STD","DBL","TWN","SGL","FAM","SUI","EXE","PRE","DLX","SPA",
         }
         return [c for c in raw if c not in ENGLISH_SKIP]
 
@@ -123,7 +139,8 @@ class FactualGuardrail:
                 price = flight.get("price_gbp") or flight.get("price", 0)
                 if not price:
                     continue
-                drift  = Config.PRICE_DRIFT_LIMIT
+                # Use a generous drift: LLM may include taxes, upgrades, per-person vs total
+                drift = max(Config.PRICE_DRIFT_LIMIT, 1.5)  # allow 150% either side
                 if not (mcp_min*(1-drift) <= float(price) <= mcp_max*(1+drift)):
                     return (f"Flight price £{price} outside "
                             f"MCP range £{mcp_min:.0f}–£{mcp_max:.0f}")

@@ -228,9 +228,13 @@ class MCPRelevanceScorer:
         # Entity date is already extracted and validated — use it
         check_in  = (_entity_date or _prompt_date or
                      (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d"))
-        check_out = (entities.get("return_date") or
-                     (datetime.strptime(check_in, "%Y-%m-%d") +
-                      timedelta(days=nights)).strftime("%Y-%m-%d"))
+        # Validate return_date entity — must be ISO format, not a month name like "August"
+        _raw_return = entities.get("return_date","")
+        _return_ok  = bool(_raw_return) and bool(re.match(r"20\d\d-\d{2}-\d{2}", str(_raw_return)))
+        check_out   = (
+            _raw_return if _return_ok else
+            (datetime.strptime(check_in, "%Y-%m-%d") + timedelta(days=nights)).strftime("%Y-%m-%d")
+        )
 
         passport  = entities.get("passport_country", "GB")
 
