@@ -158,19 +158,80 @@ class TemplateProvider(BaseProvider):
         ret_date = (datetime.strptime(dep_date, "%Y-%m-%d") +
                     timedelta(days=nights)).strftime("%Y-%m-%d")
 
-        # Extract first flight from MCP data
-        flight_m = re.search(r'"airline"\s*:\s*"([^"]+)".*?"flight_number"\s*:\s*"([^"]+)".*?"price_gbp"\s*:\s*([\d.]+)', prompt, re.S)
-        if flight_m:
-            airline, fnum, fprice = flight_m.group(1), flight_m.group(2), float(flight_m.group(3))
-        else:
-            airline, fnum, fprice = "TAP Air Portugal", "TP1363", 189 * guests
+        # Generate flight and hotel data based on DEST CODE — never reuse old plan data
+        # Destination-aware airlines and hotel names
+        DEST_AIRLINES = {
+            "EAS":"Iberia IB3163","BCN":"Vueling VY7823","MAD":"Iberia IB3401",
+            "LIS":"TAP Air Portugal TP1363","FCO":"Ryanair FR2341","CDG":"Air France AF1680",
+            "AMS":"KLM KL1023","ATH":"EasyJet EZY2301","IST":"Turkish Airlines TK1985",
+            "DXB":"Emirates EK007","DOH":"Qatar Airways QR005","AUH":"Etihad Airways EY011",
+            "DEL":"British Airways BA256","BOM":"Jet Airways 9W119","GOI":"IndiGo 6E207",
+            "VNS":"Air India AI219","ATQ":"SpiceJet SG102","DED":"IndiGo 6E413",
+            "BLR":"Air India AI503","MAA":"British Airways BA2051","COK":"Air India AI541",
+            "HYD":"British Airways BA2053","CCU":"Air India AI211",
+            "SEZ":"Air Seychelles HM051","MLE":"British Airways BA2085",
+            "MRU":"Air Mauritius MK053","BKK":"Thai Airways TG910",
+            "SIN":"Singapore Airlines SQ317","NRT":"British Airways BA005",
+            "HKG":"Cathay Pacific CX253","SYD":"Qantas QF1","JFK":"British Airways BA177",
+            "LAX":"Virgin Atlantic VS007","CPT":"British Airways BA059",
+            "NBO":"Kenya Airways KQ101","CMN":"Royal Air Maroc AT800",
+            "RAK":"EasyJet EZY8901","DPS":"Singapore Airlines SQ347",
+            "KUL":"Malaysia Airlines MH003","REP":"Bangkok Airways PG703",
+            "CMB":"SriLankan Airlines UL504","KTM":"Air India AI218",
+        }
+        DEST_HOTELS = {
+            "EAS":("Hotel Maria Cristina",5,380),"BCN":("W Barcelona",5,290),
+            "MAD":("Mandarin Oriental Ritz",5,420),"LIS":("Bairro Alto Hotel",5,310),
+            "FCO":("Hotel de la Ville",5,350),"CDG":("Le Bristol Paris",5,480),
+            "AMS":("Waldorf Astoria Amsterdam",5,420),"ATH":("Hotel Grande Bretagne",5,380),
+            "IST":("Shangri-La Bosphorus",5,310),"DXB":("Burj Al Arab",7,890),
+            "DOH":("St. Regis Doha",5,420),"AUH":("Emirates Palace",5,650),
+            "DEL":("The Leela Palace New Delhi",5,280),"BOM":("Taj Mahal Palace",5,320),
+            "GOI":("Taj Exotica Goa",5,220),"VNS":("Taj Ganges Varanasi",5,180),
+            "ATQ":("Taj Swarna Amritsar",5,160),"DED":("Ananda in the Himalayas",5,350),
+            "BLR":("The Leela Palace Bengaluru",5,240),"MAA":("ITC Grand Chola",5,200),
+            "COK":("Kumarakom Lake Resort",5,190),"HYD":("ITC Kohenur",5,210),
+            "CCU":("The Oberoi Grand Kolkata",5,200),"SEZ":("North Island Seychelles",5,950),
+            "MLE":("Soneva Jani Maldives",5,1200),"MRU":("The St. Regis Mauritius",5,520),
+            "BKK":("Capella Bangkok",5,380),"SIN":("Marina Bay Sands",5,420),
+            "NRT":("Park Hyatt Tokyo",5,380),"HKG":("The Peninsula Hong Kong",5,450),
+            "SYD":("Park Hyatt Sydney",5,360),"JFK":("The Dominick NYC",5,380),
+            "LAX":("Beverly Wilshire",5,480),"CPT":("One&Only Cape Town",5,420),
+            "NBO":("Giraffe Manor",5,1200),"CMN":("Sofitel Casablanca",5,220),
+            "RAK":("Royal Mansour Marrakech",5,480),"DPS":("Four Seasons Bali",5,380),
+            "KUL":("Mandarin Oriental KL",5,220),"CMB":("Taj Samudra Colombo",5,180),
+        }
 
-        # Extract first hotel from MCP data
-        hotel_m = re.search(r'"name"\s*:\s*"([^"]+)".*?"stars"\s*:\s*(\d).*?"price_per_night"\s*:\s*([\d.]+)', prompt, re.S)
-        if hotel_m:
-            hname, hstars, hppn = hotel_m.group(1), int(hotel_m.group(2)), float(hotel_m.group(3))
-        else:
-            hname, hstars, hppn = "Memmo Alfama", 4, 195
+        # Get airline and hotel for the CURRENT destination (not old plan data)
+        default_airline = f"British Airways BA{abs(hash(dest_code)) % 9000 + 100:04d}"
+        airline_full    = DEST_AIRLINES.get(dest_code, default_airline)
+        # Split airline name and flight number
+        parts   = airline_full.rsplit(' ', 1)
+        airline = parts[0] if len(parts) == 2 else airline_full
+        fnum    = parts[1] if len(parts) == 2 else "BA001"
+
+        # Destination-aware price estimation (distance from LHR)
+        BASE_PRICES = {
+            "EU": 150, "IN": 420, "AS": 480, "AF": 380, "AM": 520, "OC": 780
+        }
+        IATA_REGION = {
+            "EAS":"EU","BCN":"EU","MAD":"EU","LIS":"EU","FCO":"EU","CDG":"EU",
+            "AMS":"EU","ATH":"EU","IST":"EU",
+            "DXB":"AS","DOH":"AS","AUH":"AS",
+            "DEL":"IN","BOM":"IN","GOI":"IN","VNS":"IN","ATQ":"IN","DED":"IN",
+            "BLR":"IN","MAA":"IN","COK":"IN","HYD":"IN","CCU":"IN",
+            "SEZ":"AF","MLE":"AS","MRU":"AF","BKK":"AS","SIN":"AS",
+            "NRT":"AS","HKG":"AS","SYD":"OC","JFK":"AM","LAX":"AM","CPT":"AF",
+            "NBO":"AF","CMN":"AF","RAK":"AF","DPS":"AS","KUL":"AS","CMB":"AS",
+        }
+        region    = IATA_REGION.get(dest_code, "EU")
+        base_pp   = BASE_PRICES.get(region, 300)
+        fprice    = round(base_pp * guests * (1 + (nights - 7) * 0.02), 2)
+
+        # Hotel — use stars from prompt extraction (defined below), default 4 if not yet set
+        _default_stars = 4
+        hname, hstars, hppn = DEST_HOTELS.get(dest_code, (f"Luxury Hotel {dest_code}", _default_stars, 250))
+        hppn = hppn * max(1, guests // 2)  # scale for group size
 
         hotel_total = round(hppn * nights, 2)
         transfer    = 65

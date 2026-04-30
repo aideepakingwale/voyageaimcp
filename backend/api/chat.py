@@ -229,6 +229,21 @@ def _run_modify(session_id, message, action, last_plan, origin_iata, ctx):
         "prompt":   prompt[:100],
     })
 
+    # Clear MCP cache for the new destination so fresh data is fetched
+    # This prevents old plan's Maldives data appearing in a Varanasi itinerary
+    if subtype == "destination" and action.get("destination_iata"):
+        try:
+            from reasoning.engine import ReasoningEngine
+            eng = _get_engine()
+            if hasattr(eng, "_mcp_servers"):
+                for server in eng._mcp_servers.values():
+                    if hasattr(server, "_cache"):
+                        server._cache.clear()
+            log.info("MCP cache cleared for destination change", extra={
+                "new_dest": action.get("destination_iata")})
+        except Exception as e:
+            log.debug("Cache clear error: %s", e)
+
     result = _get_engine().reason(prompt, session_id)
     result["session_id"]       = session_id
     result["is_modification"]  = True
