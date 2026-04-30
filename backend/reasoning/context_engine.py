@@ -61,6 +61,38 @@ REGION_MAP: dict[str, str] = {
     "caribbean": "MIA",     "west indies": "MIA",
     "south america": "GRU", "central america": "PTY",
     "polynesia": "PPT",     "south pacific": "NAN",
+    # Spanish cities (common with/without accents)
+    "san sebastian": "EAS", "san sebastián": "EAS", "donostia": "EAS",
+    "basque country": "EAS", "basque": "EAS", "pais vasco": "EAS",
+    "bilbao": "BIO", "vitoria": "VIT",
+    "mallorca": "PMI", "majorca": "PMI",
+    "menorca": "MAH", "ibiza": "IBZ",
+    "lanzarote": "ACE", "fuerteventura": "FUE", "gran canaria": "LPA",
+    "seville": "SVQ", "sevilla": "SVQ",
+    "granada": "GRX", "malaga": "AGP", "marbella": "AGP",
+    "valencia": "VLC", "alicante": "ALC", "murcia": "MJV",
+    # Italian cities
+    "amalfi": "NAP", "positano": "NAP", "capri": "NAP",
+    "cinque terre": "GEN", "portofino": "GOA",
+    "sicily": "CTA", "palermo": "PMO", "catania": "CTA",
+    "sardinia": "CAG", "cagliari": "CAG",
+    "venice": "VCE", "venezia": "VCE",
+    "florence": "PSA", "firenze": "PSA",
+    # French destinations
+    "nice": "NCE", "cannes": "NCE", "monaco": "NCE",
+    "bordeaux": "BOD", "lyon": "LYS", "marseille": "MRS",
+    "strasbourg": "SXB", "nantes": "NTE",
+    # Other popular destinations
+    "reykjavik": "KEF", "dubrovnik": "DBV",
+    "split": "SPU", "zadar": "ZAD", "hvar": "SPU",
+    "kotor": "TIV", "budva": "TGD",
+    "santorini": "JTR", "mykonos": "JMK",
+    "rhodes": "RHO", "crete": "HER", "corfu": "CFU",
+    "zakynthos": "ZTH", "zante": "ZTH", "kos": "KGS",
+    "skiathos": "JSI", "lefkada": "PVK",
+    "funchal": "FNC", "madeira": "FNC",
+    "azores": "PDL",
+
     # Country to hub (for "Spain", "India" etc.)
     "spain": "MAD",  "france": "CDG", "italy": "FCO",
     "germany": "FRA","greece": "ATH", "portugal": "LIS",
@@ -498,22 +530,54 @@ def _deterministic(message: str, history: list, plan: dict | None, session_id: s
 def _parse_json(text: str) -> dict | None:
     try:
         text = text.strip()
+
+        # Strip markdown fences
         if "```" in text:
             parts = text.split("```")
             text = parts[1] if len(parts) >= 3 else text
-            if text.startswith("json"): text = text[4:]
-        s = text.find("{"); e = text.rfind("}")
-        if s != -1 and e != -1:
-            data = json.loads(text[s:e+1])
-            for k, v in list(data.items()):
-                if v in ("null","none","","N/A"): data[k] = None
-            if data.get("destination_iata"):
-                iata = str(data["destination_iata"]).upper().strip()
-                data["destination_iata"] = iata if re.match(r"^[A-Z]{3}$", iata) else None
-            return data
+            if text.startswith("json"):
+                text = text[4:]
+        text = text.strip()
+
+        # Always extract the FIRST complete {...} object — ignore leading arrays or trailing text
+        # This handles LLM responses like: ["Dubai"], "summary": "..." or mixed output
+        s = text.find("{")
+        e = text.rfind("}")
+        if s == -1 or e == -1 or e <= s:
+            return None
+
+        json_str = text[s:e+1]
+
+        # Verify it's a valid JSON object (not just a fragment)
+        data = json.loads(json_str)
+        if not isinstance(data, dict):
+            return None
+
+        # Normalise nulls
+        for k, v in list(data.items()):
+            if v in ("null", "none", "", "N/A", "n/a"):
+                data[k] = None
+
+        # Validate IATA
+        if data.get("destination_iata"):
+            iata = str(data["destination_iata"]).upper().strip()
+            data["destination_iata"] = iata if re.match(r"^[A-Z]{3}$", iata) else None
+
+        # Validate date
+        if data.get("departure_date"):
+            try:
+                datetime.strptime(str(data["departure_date"]), "%Y-%m-%d")
+            except ValueError:
+                data["departure_date"] = None
+
+        return data
+
+    except json.JSONDecodeError as e:
+        log.debug("JSON parse error: %s | text: %.80s", e, text)
+        return None
     except Exception as e:
-        log.debug("JSON parse error: %s", e)
-    return None
+        log.debug("Parse error: %s", e)
+        return None
 
 
 def _plan_text(plan: dict | None) -> str:

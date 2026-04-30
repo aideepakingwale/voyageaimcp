@@ -428,11 +428,22 @@ async function _handleResponse(data) {
 
   if (out.intent && out.recommendations) {
     await renderItineraryCard(out, conf, ac, meta, data);
+  } else if (data.status === 'human_handoff' || (!out.intent && !out.summary)) {
+    // Engine hit max retries or returned nothing — show helpful error with retry option
+    const dest = (data.llm_output?.intent?.destination) || 'your destination';
+    appendAI(
+      '<div style="padding:12px 16px;border:1px solid var(--amber);border-radius:10px;'
+      + 'background:rgba(243,156,18,.06);">'
+      + '<strong style="color:var(--amber)">⚠ Could not build itinerary</strong><br>'
+      + '<span style="color:var(--muted);font-size:13px">'
+      + 'The system encountered an issue. You can try: \n'
+      + '<br>• Adding a specific date: "in August" or "August 10"'
+      + '<br>• Confirming the destination: "Fly to San Sebastián"'
+      + '<br>• Simplifying: "San Sebastián 4 people 9 nights August £4000"'
+      + '</span></div>'
+    );
   } else if (out.summary) {
     appendAI(out.summary);
-  } else {
-    appendAI('<em style="color:var(--muted)">No itinerary found — try being more specific:</em><br>' +
-             '<em style="color:var(--dim)">e.g. "Seychelles 4 people 2 weeks October £4000"</em>');
   }
 }
 

@@ -47,21 +47,41 @@ class TemplateProvider(BaseProvider):
         last_intent     = None
 
         try:
-            from reasoning.mcp_scorer import extract_destination
-            _CN = {"LIS":"Lisbon","BCN":"Barcelona","MAD":"Madrid","FCO":"Rome",
-                   "CDG":"Paris","AMS":"Amsterdam","ATH":"Athens","DXB":"Dubai",
-                   "NRT":"Tokyo","SIN":"Singapore","SEZ":"Seychelles","MLE":"Maldives",
-                   "DPS":"Bali","BKK":"Bangkok","MRU":"Mauritius","JFK":"New York",
-                   "CPT":"Cape Town","LAX":"Los Angeles","SYD":"Sydney","AKL":"Auckland",
-                   "NCE":"Nice","JTR":"Santorini","HKT":"Phuket","ZRH":"Zurich",
-                   "VIE":"Vienna","GVA":"Geneva","PRG":"Prague","BUD":"Budapest",
-                   "CMN":"Casablanca","RAK":"Marrakech","NBO":"Nairobi",
-                   "GOI":"Goa","DEL":"Delhi","BOM":"Mumbai","CMB":"Sri Lanka",
-                   "KUL":"Kuala Lumpur","ICN":"Seoul","HKG":"Hong Kong",
-                   "OPO":"Porto","FAO":"Algarve","TFS":"Tenerife","PMI":"Mallorca",
-                   "JMK":"Mykonos","CFU":"Corfu","HER":"Crete","KEF":"Reykjavik"}
-            dest_code, country_code = extract_destination(prompt, {})
-            dest_city = _CN.get(dest_code, dest_code.title())
+            # Priority 1: "to CityName (IATA)" pattern — most reliable in our prompts
+            import re as _re2
+            m = _re2.search(r"trip\s+to\s+([A-Za-zÀ-ÿ][\wÀ-ÿ\s]+?)\s*\(([A-Z]{3})\)", prompt)
+            if m:
+                dest_city = m.group(1).strip()
+                dest_code = m.group(2).upper()
+                country_code = ""
+                # Resolve country from cache
+                try:
+                    from core.reference_cache import ref
+                    if not ref._built: ref.build()
+                    ap = ref.airport(dest_code)
+                    if ap:
+                        dest_city    = ap.get("city", dest_city)
+                        country_code = ap.get("country_code","")
+                except Exception:
+                    pass
+            else:
+                # Priority 2: session entities (pre-extracted by context engine)
+                dest_code = ""; country_code = ""; dest_city = ""
+                try:
+                    from reasoning.mcp_scorer import extract_destination
+                    dest_code, country_code = extract_destination(prompt, {})
+                    if dest_code:
+                        try:
+                            from core.reference_cache import ref
+                            if not ref._built: ref.build()
+                            ap = ref.airport(dest_code)
+                            dest_city = ap.get("city", dest_code) if ap else dest_code
+                        except Exception:
+                            dest_city = dest_code
+                except Exception:
+                    pass
+                if not dest_code:
+                    dest_code = "LIS"; country_code = "PT"; dest_city = "Lisbon"
         except Exception:
             dest_code = "LIS"; country_code = "PT"; dest_city = "Lisbon"
 

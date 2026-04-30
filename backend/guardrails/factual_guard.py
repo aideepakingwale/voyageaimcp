@@ -13,8 +13,10 @@ log = logging.getLogger("voyageai.guardrails")
 
 
 def _get_ref():
-    """Lazy-load reference cache (already built at startup)."""
+    """Lazy-load reference cache — build it if not yet done."""
     from core.reference_cache import ref
+    if not ref._built:
+        ref.build()   # safe to call multiple times (idempotent)
     return ref
 
 
@@ -79,12 +81,30 @@ class FactualGuardrail:
         raw  = re.findall(r'\b([A-Z]{3})\b', text)
 
         # Hard-skip list for common English words not in the cache
+        # Hard-skip: common words + codes that are ALWAYS valid airports
+        # Listed here so factual check works even before cache is built
         ENGLISH_SKIP = {
+            # English words
             "THE","AND","FOR","NOT","BUT","YOU","HIS","HER","CAN","ALL",
             "ARE","WAS","HAS","HAD","ITS","ONE","OUT","WHO","GET","GOT",
             "SET","YES","NOW","OLD","NEW","OWN","USE","DAY","WAY","MAY",
             "SAY","SEE","HOW","OUR","ANY","FAR","FEW","BIG","DID","CAR",
             "END","JOB","LET","PUT","RUN","INN","AIR","SKY","SEA","BAY",
+            # Common tech/business abbreviations that appear in JSON
+            "LLM","MCP","RAG","GDS","API","URL","PDF","CSS","ETA","VIP",
+            "TBC","TBD","PRO","GDP","VAT","TAX","SLA","ROI","KPI","CRM",
+            "SRC","DST","DEP","ARR","DUR","LEG","PAX","ADT","CHD","INF",
+            "GPS","ETD","MON","TUE","WED","THU","FRI","SAT","SUN",
+            # Known valid airports (fallback if cache fails)
+            "LHR","LGW","MAN","EDI","BHX","BRS","LIS","MAD","BCN","CDG",
+            "FCO","FRA","AMS","DXB","DOH","SIN","NRT","HKG","JFK","LAX",
+            "SYD","DUB","ATH","IST","CPH","ARN","ZRH","GVA","VIE","BRU",
+            # Airline IATA codes (2-3 letter) that appear in JSON but are NOT airports
+            "TAP","BAW","EZY","RYR","IBE","KLM","AFR","DLH","AZA","TOM",
+            "EAT","SAS","NAX","UAE","ETD","QTR","EKY","FIN","AAL","DAL",
+            "UAL","BAA","VIR","MON","TUI","TCX","AEA","WZZ","VUE","LOT",
+            # Rating/type codes
+            "STD","DBL","TWN","SGL","FAM","SUI","VIP","EXE","PRE",
         }
         return [c for c in raw if c not in ENGLISH_SKIP]
 
