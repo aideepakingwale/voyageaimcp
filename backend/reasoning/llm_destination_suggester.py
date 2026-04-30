@@ -36,6 +36,9 @@ RULES:
 6. Keep descriptions specific and evocative — tell them WHY this destination fits THEIR ask
 7. Budget should be realistic return flight + 7 nights hotel from UK in GBP
 
+IMPORTANT: Return EXACTLY 3 suggestion objects. If the user asks for Spain, suggest 3 Spanish cities.
+Never return fewer than 3 objects. Never return a string array like ["City1"].
+
 Return this exact JSON (array of 3 objects):
 [
   {
@@ -70,6 +73,20 @@ CONVERSATION CONTEXT:
 Generate 3 destination suggestions that perfectly match what this user is asking for.
 Think about their emotional intent, not just the literal words.
 Avoid any destination they have already visited."""
+
+
+
+def _pad_to_3(suggestions: list, query: str = "travel") -> list:
+    """Ensure we always return exactly 3 suggestions."""
+    if len(suggestions) >= 3:
+        return suggestions[:3]
+    seen   = {s.get("iata") for s in suggestions}
+    extras = _fallback_suggestions(query, [])
+    for extra in extras:
+        if extra.get("iata") not in seen and len(suggestions) < 3:
+            suggestions.append(extra)
+            seen.add(extra.get("iata"))
+    return suggestions
 
 
 def suggest_destinations_with_llm(
@@ -137,6 +154,10 @@ def suggest_destinations_with_llm(
 
     if not suggestions:
         return {}
+
+    # Pad to 3 suggestions if LLM returned fewer
+    if len(suggestions) < 3:
+        suggestions = _pad_to_3(suggestions, query)
 
     # Build the formatted summary for the chat UI
     summary = _build_summary(query, suggestions)
@@ -258,9 +279,14 @@ def _validate_suggestions(data: list) -> list:
         item.setdefault("why_this_fits",     "")
         item.setdefault("highlights",        [])
         item.setdefault("best_time",         "Year-round")
-        item.setdefault("budget_pp_gbp",     2500)
         item.setdefault("duration_suggestion","7 nights")
         item.setdefault("country",           "")
+        # Sanitise budget — LLM may return string like "2500" or "£2,500"
+        raw_budget = item.get("budget_pp_gbp", 2500)
+        try:
+            item["budget_pp_gbp"] = int(str(raw_budget).replace(",","").replace("£","").replace("$","").strip())
+        except (ValueError, TypeError):
+            item["budget_pp_gbp"] = 2500
         valid.append(item)
     return valid or None
 
@@ -353,7 +379,11 @@ def _build_summary(query: str, suggestions: list) -> str:
         if best:
             line += f"\n   📅 Best time: {best}"
         if budget:
-            line += f"  ·  💷 ~£{budget:,}/pp for {dur}"
+            try:
+                budget_int = int(str(budget).replace(",","").replace("£","").replace("$","").strip())
+                line += f"  ·  💷 ~£{budget_int:,}/pp for {dur}"
+            except (ValueError, TypeError):
+                line += f"  ·  💷 ~£{budget}/pp for {dur}"
         lines.append(line)
 
     lines.append(
