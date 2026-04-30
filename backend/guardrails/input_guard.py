@@ -4,67 +4,48 @@ from config import Config
 from .types import GuardrailResult
 
 
+def _get_gcfg():
+    from core.guardrail_config_cache import gcfg
+    if not gcfg._built: gcfg.build()
+    return gcfg
+
+
 class InputGuardrail:
     """
     Protects against:
-    - Prompt injection / jailbreaking attempts
-    - Context flooding (oversized inputs)
-    - Out-of-scope (non-travel) queries
+    - Prompt injection / jailbreaking attempts  (patterns from guardrail_injection_patterns DB table)
+    - Context flooding / oversized inputs       (MAX_INPUT_TOKENS from guardrail_config DB table)
+    - Out-of-scope non-travel queries           (signals from guardrail_travel_signals DB table)
+    All validation data managed via data/load_guardrail_config.py.
     """
 
-    INJECTION_PATTERNS = [
-        r"ignore\s+(?:previous|all)\s+instructions?",
-        r"you\s+are\s+now",
-        r"pretend\s+you\s+are",
-        r"disregard\s+your",
-        r"new\s+system\s+prompt",
-        r"act\s+as\s+if",
-        r"forget\s+everything",
-        r"jailbreak",
-        r"DAN\s+mode",
-        r"override\s+safety",
-    ]
-
-    TRAVEL_SIGNALS = [
-        # Core travel terms
-        "flight", "hotel", "trip", "travel", "holiday", "vacation",
-        "book", "journey", "destination", "airport", "visa", "passport",
-        "accommodation", "transfer", "car", "experience", "tour", "plan",
-        "weather", "currency", "budget", "night", "check.?in", "check.?out",
-        "family", "adult", "child", "passenger", "ticket", "itinerary",
-        "resort", "cruise", "ski", "beach", "city", "abroad", "overseas",
-        # Modification / follow-up signals
-        "change", "update", "modify", "instead", "different",
-        "cheaper", "upgrade", "earlier", "later", "fewer", "more",
-        "reschedule", "amend", "adjust", "keep", "same but",
-        "dates", "guests", "people", "person", "rooms", "stars",
-        "what if", "how about", "what about", "actually",
-    ]
-
     def validate(self, text: str) -> GuardrailResult:
+        gcfg  = _get_gcfg()
         words = text.split()
 
-        # Check 1: length limit
-        if len(words) > Config.MAX_INPUT_TOKENS:
+        # Check 1: length limit (from DB)
+        max_tokens = gcfg.limit("MAX_INPUT_TOKENS", 512)
+        if len(words) > max_tokens:
             return GuardrailResult(
                 passed=False, layer="L1_INPUT",
-                reason=f"Input too long ({len(words)} words, max {Config.MAX_INPUT_TOKENS})",
+                reason=f"Input too long ({len(words)} words, max {max_tokens})",
                 action="reject",
             )
 
-        # Check 2: injection detection
-        for pattern in self.INJECTION_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE):
+        # Check 2: injection detection (patterns from DB)
+        for pattern in gcfg.injection_patterns():
+            if pattern.search(text):
                 return GuardrailResult(
                     passed=False, layer="L1_INPUT",
                     reason="Potential prompt injection detected",
                     action="reject",
                 )
 
-        # Check 3: travel domain relevance (only for longer inputs)
+        # Check 3: travel domain relevance — only for medium-length inputs
         if len(words) > 3:
             text_lower = text.lower()
-            has_signal = any(re.search(p, text_lower) for p in self.TRAVEL_SIGNALS)
+            signals    = gcfg.travel_signals("ALL")  # all categories from DB
+            has_signal = any(re.search(sig, text_lower) for sig in signals)
             if not has_signal:
                 return GuardrailResult(
                     passed=False, layer="L1_INPUT",

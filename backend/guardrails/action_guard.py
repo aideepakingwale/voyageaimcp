@@ -22,7 +22,11 @@ class ActionGuardrail:
             )
 
         # Confidence threshold
-        if confidence < Config.CONFIDENCE_THRESHOLD:
+        from core.guardrail_config_cache import gcfg
+        if not gcfg._built: gcfg.build()
+        confidence_threshold = gcfg.threshold("CONFIDENCE_THRESHOLD", 0.72)
+        high_value_threshold = gcfg.threshold("HIGH_VALUE_THRESHOLD", 1000.0)
+        if confidence < confidence_threshold:
             return GuardrailResult(
                 passed=False, layer="L3_ACTION",
                 reason=f"Confidence {confidence:.0%} below {Config.CONFIDENCE_THRESHOLD:.0%} threshold",
@@ -31,7 +35,7 @@ class ActionGuardrail:
 
         # High-value human confirmation
         total = float(llm_output.get("total_cost_gbp", 0))
-        if total > Config.HIGH_VALUE_THRESHOLD:
+        if total > high_value_threshold:
             return GuardrailResult(
                 passed=False, layer="L3_ACTION",
                 reason=f"Booking value £{total:.0f} requires human confirmation",

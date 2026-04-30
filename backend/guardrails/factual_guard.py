@@ -1,7 +1,7 @@
 """
 Layer 2b — Factual Claim Verification
-Uses the startup ReferenceCache for all IATA, currency and country lookups.
-No hardcoded lists — all data lives in data/reference_data.py.
+All validation data loaded from DB via GuardrailConfigCache.
+No hardcoded skip lists — manage everything via data/load_guardrail_config.py.
 """
 import json
 import re
@@ -13,29 +13,32 @@ log = logging.getLogger("voyageai.guardrails")
 
 
 def _get_ref():
-    """Lazy-load reference cache — build it if not yet done."""
     from core.reference_cache import ref
-    if not ref._built:
-        ref.build()   # safe to call multiple times (idempotent)
+    if not ref._built: ref.build()
     return ref
+
+def _get_gcfg():
+    from core.guardrail_config_cache import gcfg
+    if not gcfg._built: gcfg.build()
+    return gcfg
 
 
 class FactualGuardrail:
     """
     Cross-checks LLM output against reference data:
-      - IATA codes validated against ReferenceCache (not a hardcoded list)
-      - Currency codes, country codes, common abbreviations excluded from IATA check
-      - Price drift check vs MCP data (±30%)
+      - IATA codes validated against ReferenceCache (DB-backed, 504 airports)
+      - Skip codes loaded from guardrail_skip_codes DB table
+      - Price drift threshold from guardrail_config DB table
     """
 
     def verify(self, llm_output: dict, mcp_data: dict) -> GuardrailResult:
         ref      = _get_ref()
+        gcfg     = _get_gcfg()
         failures = []
         checks   = 0
 
-        # ── IATA code validation ──────────────────────────────
-        for code in self._extract_candidate_codes(llm_output):
-            # Only validate codes that look like airports (not currencies/countries/abbrevs)
+        # ── IATA code validation ──────────────────────────────────────────────
+        for code in self._extract_candidate_codes(llm_output, gcfg):
             if not ref.should_validate_as_iata(code):
                 continue
             checks += 1
@@ -43,9 +46,9 @@ class FactualGuardrail:
                 failures.append(f"Unknown IATA code: {code}")
                 log.debug("Unknown IATA: %s", code)
 
-        # ── Price drift vs MCP ────────────────────────────────
+        # ── Price drift vs MCP ────────────────────────────────────────────────
         if mcp_data:
-            issue = self._check_flight_price(llm_output, mcp_data)
+            issue = self._check_flight_price(llm_output, mcp_data, gcfg)
             if issue:
                 checks += 1
                 failures.append(issue)
@@ -56,75 +59,46 @@ class FactualGuardrail:
                 action="proceed", failed_fields=[], data={"accuracy": 1.0}
             )
 
-        accuracy = max(0.0, 1.0 - len(failures) / checks)
-        passed   = accuracy >= Config.FACTUAL_ACCURACY_MIN
+        accuracy_min = gcfg.threshold("FACTUAL_ACCURACY_MIN", 0.80)
+        accuracy     = max(0.0, 1.0 - len(failures) / checks)
+        passed       = accuracy >= accuracy_min
 
         return GuardrailResult(
-            layer    = "L2b_FACTUAL",
-            passed   = passed,
-            reason   = (f"Factual accuracy {accuracy:.0%} below "
-                        f"{Config.FACTUAL_ACCURACY_MIN:.0%}. "
-                        f"Issues: {failures}") if not passed else "ok",
-            action   = "proceed" if passed else "retry",
+            layer         = "L2b_FACTUAL",
+            passed        = passed,
+            reason        = (f"Factual accuracy {accuracy:.0%} below "
+                             f"{accuracy_min:.0%}. Issues: {failures}") if not passed else "ok",
+            action        = "proceed" if passed else "retry",
             failed_fields = failures,
-            data     = {"accuracy": round(accuracy, 2)},
+            data          = {"accuracy": round(accuracy, 2)},
         )
 
-    def _extract_candidate_codes(self, output: dict) -> list[str]:
+    def _extract_candidate_codes(self, output: dict, gcfg) -> list[str]:
         """
-        Extract all 3-letter uppercase tokens from the LLM output.
-        Returns only tokens that COULD be IATA codes — filters common
-        English words and known non-airport abbreviations using the cache.
+        Extract 3-letter uppercase tokens from airport-context fields only.
+        Filters against the DB-managed skip code list.
         """
-        ref  = _get_ref()
         text = json.dumps(output, default=str)
-        raw  = re.findall(r'\b([A-Z]{3})\b', text)
 
-        # Hard-skip list for common English words not in the cache
-        # Hard-skip: common words + codes that are ALWAYS valid airports
-        # Listed here so factual check works even before cache is built
-        ENGLISH_SKIP = {
-            # English words
-            "THE","AND","FOR","NOT","BUT","YOU","HIS","HER","CAN","ALL",
-            "ARE","WAS","HAS","HAD","ITS","ONE","OUT","WHO","GET","GOT",
-            "SET","YES","NOW","OLD","NEW","OWN","USE","DAY","WAY","MAY",
-            "SAY","SEE","HOW","OUR","ANY","FAR","FEW","BIG","DID","CAR",
-            "END","JOB","LET","PUT","RUN","INN","AIR","SKY","SEA","BAY",
-            # Common tech/business abbreviations that appear in JSON
-            "LLM","MCP","RAG","GDS","API","URL","PDF","CSS","ETA","VIP",
-            "TBC","TBD","PRO","GDP","VAT","TAX","SLA","ROI","KPI","CRM",
-            "SRC","DST","DEP","ARR","DUR","LEG","PAX","ADT","CHD","INF",
-            "GPS","ETD","MON","TUE","WED","THU","FRI","SAT","SUN",
-            # Known valid airports (fallback if cache fails) — UK + major hubs
-            "LHR","LGW","MAN","EDI","BHX","BRS","NCL","LBA","LPL","BFS",
-            "LIS","MAD","BCN","CDG","FCO","FRA","AMS","DXB","DOH","SIN",
-            "NRT","HKG","JFK","LAX","SYD","DUB","ATH","IST","CPH","ARN",
-            "ZRH","GVA","VIE","BRU","PRG","WAW","BUD","OTP","SOF","ZAG",
-            # Indian airports
-            "DEL","BOM","MAA","BLR","HYD","CCU","GOI","VNS","ATQ","DED",
-            "AMD","LKO","JAI","IXC","TRV","COK","IXB","GAY","IXM","BBI",
-            # SE Asia / Pacific
-            "BKK","HKT","DPS","CGK","KUL","MNL","SGN","HAN","CMB","MLE",
-            "SEZ","MRU","REP","VTE","RGN","HND","KIX","ICN","PEK","PVG",
-            # Americas / Africa
-            "JFK","LAX","MIA","ORD","SFO","YYZ","GRU","EZE","BOG","LIM",
-            "JNB","CPT","NBO","CMN","RAK","ADD","DAR","LOS","ACC",
-            # Middle East
-            "AUH","SHJ","RUH","JED","KWI","MCT","AMM","TLV","CAI","BAH",
-            # Airline IATA codes that appear in recommendations JSON
-            "TAP","BAW","EZY","RYR","IBE","KLM","AFR","DLH","AZA","TOM",
-            "SAS","NAX","UAE","ETD","QTR","FIN","AAL","DAL","UAL","BAA",
-            "VIR","MON","TUI","TCX","WZZ","LOT","WYZ","AIC","AIX","THA",
-            "SIA","MAS","EVA","CAL","ANA","JAL","OZA","CXA","HAV","CES",
-            # Hotel / brand codes that appear in JSON (NOT airports)
-            "ITC","TAJ","OBR","LEM","ADR","HYT","MAR","IHG","ACC","WIN",
-            "SHO","AND","LHW","SMH","FHR","GHA","YTL","AMA","OAS","REL",
-            # Rating/room type codes
-            "STD","DBL","TWN","SGL","FAM","SUI","EXE","PRE","DLX","SPA",
-        }
-        return [c for c in raw if c not in ENGLISH_SKIP]
+        # Only check codes in airport-relevant JSON fields
+        airport_context = re.findall(
+            r'"(?:origin|destination|iata|city_code|airport|from|to)"\s*:\s*"([A-Z]{3})"',
+            text
+        )
+        if airport_context:
+            candidates = list(set(airport_context))
+        else:
+            candidates = re.findall(r'\b([A-Z]{3})\b', text)
 
-    def _check_flight_price(self, output: dict, mcp_data: dict) -> str | None:
+        # Filter: remove DB-managed skip codes + reference cache non-airports
+        skip_codes = gcfg.skip_codes()
+        ref        = _get_ref()
+        return [
+            c for c in candidates
+            if c not in skip_codes and ref.should_validate_as_iata(c)
+        ]
+
+    def _check_flight_price(self, output: dict, mcp_data: dict, gcfg) -> str | None:
         try:
             llm_flights = output.get("recommendations", {}).get("flights", [])
             mcp_flights = (mcp_data.get("flights", {})
@@ -135,13 +109,14 @@ class FactualGuardrail:
             mcp_min = min(f.get("price_gbp", 99999) for f in mcp_flights)
             mcp_max = max(f.get("price_gbp", 0)     for f in mcp_flights)
 
+            # Drift limit from DB config (default 1.5 = ±150%)
+            drift = gcfg.threshold("PRICE_DRIFT_LIMIT", 1.5)
+
             for flight in llm_flights[:2]:
                 price = flight.get("price_gbp") or flight.get("price", 0)
                 if not price:
                     continue
-                # Use a generous drift: LLM may include taxes, upgrades, per-person vs total
-                drift = max(Config.PRICE_DRIFT_LIMIT, 1.5)  # allow 150% either side
-                if not (mcp_min*(1-drift) <= float(price) <= mcp_max*(1+drift)):
+                if not (mcp_min * (1 - drift) <= float(price) <= mcp_max * (1 + drift)):
                     return (f"Flight price £{price} outside "
                             f"MCP range £{mcp_min:.0f}–£{mcp_max:.0f}")
         except Exception:

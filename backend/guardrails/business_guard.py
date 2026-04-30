@@ -22,12 +22,14 @@ class BusinessRulesGuardrail:
         budget = intent.get("budget_gbp", float("inf"))
         guests = intent.get("guests", 1)
 
-        # Rule 1: Budget — soft warning only (do not hard-block; user decides)
-        # Hard block only if >50% over budget (likely a data error)
-        if total > 0 and budget < 99000 and total > budget * 1.50:
+        # Rule 1: Budget — hard block only if significantly over (threshold from DB)
+        from core.guardrail_config_cache import gcfg
+        if not gcfg._built: gcfg.build()
+        max_overshoot = gcfg.threshold("MAX_BUDGET_OVERSHOOT", 0.50)
+        if total > 0 and budget < 99000 and total > budget * (1 + max_overshoot):
             violations.append(
-                f"Total cost £{total:.0f} is more than 50% over budget £{budget:.0f} "
-                f"— likely a data error, please check"
+                f"Total cost £{total:.0f} is more than {max_overshoot:.0%} over "
+                f"budget £{budget:.0f} — likely a data error, please check"
             )
 
         # Rule 2: Departure date in future

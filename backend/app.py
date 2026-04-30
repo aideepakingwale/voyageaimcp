@@ -13,6 +13,10 @@ def create_app(config_class=Config) -> Flask:
     from core.reference_cache import ref as _ref
     _ref.build()
 
+    # Build guardrail config cache from guardrail_* DB tables (once at startup)
+    from core.guardrail_config_cache import gcfg as _gcfg
+    _gcfg.build()
+
     app = Flask(__name__)
     app.config.from_object(config_class)
     CORS(app, origins=config_class.CORS_ORIGINS)
