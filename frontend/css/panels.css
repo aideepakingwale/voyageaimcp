@@ -153,3 +153,33 @@
 .pers-dest   { font-size: 13px; font-weight: 600; }
 .pers-reason { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .pers-match  { font-size: 12px; font-family: var(--mono); color: var(--teal); margin-left: auto; font-weight: 600; }
+
+/* ── Ground Transfer Banner ─────────────────────────────────── */
+.transfer-banner {
+  display:        flex;
+  gap:            14px;
+  align-items:    flex-start;
+  background:     rgba(245,166,35,.06);
+  border:         1px solid rgba(245,166,35,.25);
+  border-radius:  10px;
+  padding:        14px 16px;
+  margin:         12px 0;
+}
+.transfer-icon {
+  font-size:      24px;
+  flex-shrink:    0;
+  margin-top:     2px;
+}
+.transfer-title {
+  font-weight:    700;
+  font-size:      12px;
+  color:          var(--amber);
+  letter-spacing: .3px;
+  margin-bottom:  4px;
+  text-transform: uppercase;
+}
+.transfer-text {
+  font-size:      13px;
+  color:          var(--muted);
+  line-height:    1.5;
+}

@@ -174,6 +174,90 @@ class AmadeusClient:
             log.warning("Amadeus activities error: %s", e)
         return []
 
+    def nearest_relevant_airports(
+        self,
+        lat: float,
+        lon: float,
+        radius: int = 500,
+        max_results: int = 5,
+        sort: str = "analytics.flights.score",
+    ) -> list[dict]:
+        """
+        Airport Nearest Relevant API.
+        Docs: https://developers.amadeus.com/self-service/category/flights/
+              api-doc/airport-nearest-relevant/api-reference
+        Endpoint: GET /v1/reference-data/locations/airports
+        Returns airports sorted by analytics (flight traffic score) —
+        the most *useful* airport near a location, not just the geographically closest.
+
+        Each result dict:
+          iataCode, name, address.cityName, address.countryCode,
+          geoCode.latitude, geoCode.longitude,
+          distance.value (km), distance.unit,
+          analytics.flights.score, analytics.travelers.score
+        """
+        headers = self._auth_header()
+        if not headers:
+            return []
+        try:
+            r = get(
+                f"{AMADEUS_BASE}/v1/reference-data/locations/airports",
+                params={
+                    "latitude":   round(lat, 6),
+                    "longitude":  round(lon, 6),
+                    "radius":     radius,
+                    "page[limit]":max_results,
+                    "sort":       sort,
+                },
+                headers=headers,
+                timeout=10,
+            )
+            if r.ok:
+                data = r.json().get("data", [])
+                log.info("Amadeus nearest airports: found %d results for (%s,%s)",
+                         len(data), lat, lon)
+                return data
+            log.warning("Amadeus nearest airports %s: %s", r.status_code, r.text[:200])
+        except Exception as e:
+            log.warning("Amadeus nearest airports error: %s", e)
+        return []
+
+    def geocode_place(self, place_name: str) -> tuple[float, float] | None:
+        """
+        Convert a place name to lat/lon using the Amadeus Location Search API.
+        Endpoint: GET /v1/reference-data/locations
+        keyword: the place name, subType: CITY or AIRPORT
+
+        Returns (lat, lon) or None.
+        """
+        headers = self._auth_header()
+        if not headers:
+            return None
+        try:
+            r = get(
+                f"{AMADEUS_BASE}/v1/reference-data/locations",
+                params={
+                    "keyword":  place_name,
+                    "subType":  "CITY,AIRPORT",
+                    "page[limit]": 3,
+                },
+                headers=headers,
+                timeout=8,
+            )
+            if r.ok:
+                items = r.json().get("data", [])
+                for item in items:
+                    geo = item.get("geoCode", {})
+                    lat = geo.get("latitude")
+                    lon = geo.get("longitude")
+                    if lat and lon:
+                        log.info("Amadeus geocode '%s' → (%s, %s)", place_name, lat, lon)
+                        return float(lat), float(lon)
+            log.debug("Amadeus geocode %s: %s", r.status_code, r.text[:200])
+        except Exception as e:
+            log.debug("Amadeus geocode error: %s", e)
+        return None
+
 
 # Module-level singleton
 amadeus = AmadeusClient()

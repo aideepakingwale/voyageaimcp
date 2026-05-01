@@ -291,6 +291,19 @@ def resolve_destination(text: str, exclude_iata: str = None) -> tuple[str | None
             except Exception:
                 pass
 
+    # ── Nearest airport fallback ────────────────────────────────────────────
+    # Nothing resolved — try the nearest airport module
+    try:
+        from reasoning.nearest_airport import find_nearest_airport
+        result = find_nearest_airport(text)
+        if result:
+            log.info("Nearest airport resolved: %s → %s (%s, %.0fkm by %s)",
+                     text, result.iata, result.airport_city,
+                     result.distance_km, result.transfer_mode)
+            return result.airport_city, result.iata
+    except Exception as _e:
+        pass
+
     return None, None
 
 

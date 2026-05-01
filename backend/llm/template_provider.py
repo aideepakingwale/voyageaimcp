@@ -1,3 +1,26 @@
+
+def _build_transfer_note(prompt: str, dest_code: str, dest_city: str) -> str | None:
+    """Build a ground transfer note if the destination needs road travel from nearest airport."""
+    try:
+        from reasoning.nearest_airport import KNOWN_PLACES, _transfer_advice, _transfer_time
+        prompt_l = prompt.lower()
+        for place_key, data in KNOWN_PLACES.items():
+            if (place_key in prompt_l and
+                data.get("hint_iata") == dest_code and
+                data.get("km", 0) > 5):
+                place_name = data["desc"].split("(")[0].strip()
+                mode = data["mode"]
+                km   = data["km"]
+                time = _transfer_time(km, mode)
+                return (
+                    f"✈ Fly into {dest_city} Airport ({dest_code}), then "
+                    f"travel ~{km}km by {mode} ({time}) to reach {place_name}. "
+                    f"We recommend arranging a private car or guided transfer in advance."
+                )
+    except Exception:
+        pass
+    return None
+
 """
 Template Provider — ZERO COST, always works
 Fires when ALL API providers fail or have no keys.
@@ -317,6 +340,7 @@ class TemplateProvider(BaseProvider):
                      "total_gbp": 55 * guests, "duration_h": 3.0},
                 ],
                 "weather_advisory": f"Typically pleasant in {dest_city}. Pack layers for evenings.",
+                "ground_transfer": _build_transfer_note(prompt, dest_code, dest_city),
                 "visa_advisory":    "No visa required for UK passport holders (Schengen area).",
                 "currency_tip":     "£1 ≈ €1.17. Carry some cash for local markets.",
             },

@@ -13,6 +13,28 @@ def create_app(config_class=Config) -> Flask:
     from core.reference_cache import ref as _ref
     _ref.build()
 
+    # Auto-reload reference data if DB has fewer airports than source
+    # (catches the case where new airports were added to reference_data.py
+    #  but load_reference_data.py hasn't been run yet)
+    try:
+        from data.reference_data import AIRPORTS as _SOURCE_AIRPORTS
+        _db_count = _ref.stats().get("airports", 0)
+        _src_count = len(_SOURCE_AIRPORTS)
+        if _src_count > _db_count:
+            import logging as _log_startup
+            _log_startup.getLogger("voyageai.app").warning(
+                "DB has %d airports, source has %d — auto-reloading reference data",
+                _db_count, _src_count
+            )
+            from data.load_reference_data import get_db as _rdb, create_tables as _rtables, load_all as _rload
+            from data.reference_data import CURRENCIES as _C, COUNTRIES as _CO, GBP_FALLBACK_RATES as _G
+            _conn = _rdb(); _rtables(_conn)
+            _rload(_conn, _SOURCE_AIRPORTS, _C, _CO, _G)
+            _conn.close()
+            _ref.build()  # rebuild cache from updated DB
+    except Exception as _e:
+        pass
+
     # Build guardrail config cache from guardrail_* DB tables (once at startup)
     from core.guardrail_config_cache import gcfg as _gcfg
     _gcfg.build()

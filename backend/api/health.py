@@ -53,3 +53,36 @@ def reference_stats():
         return jsonify(stats)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/geocode", methods=["GET"])
+def geocode_test():
+    """
+    Test the geocoding chain interactively.
+    GET /api/geocode?q=Pushkar&country=IN
+    Returns (lat, lon, provider) for any place.
+    """
+    place   = request.args.get("q", "").strip()
+    country = request.args.get("country", "").strip().upper()
+    if not place:
+        return jsonify({"error": "q (place name) is required"}), 400
+    from mcp_servers.geocoding_client import geocode, geocoding_status
+    result  = geocode(place, country)
+    if result:
+        lat, lon, source = result
+        # Also find nearest airport
+        from reasoning.nearest_airport import find_nearest_airport
+        airport = find_nearest_airport(place, country_hint=country)
+        return jsonify({
+            "place":     place,
+            "lat":       lat,
+            "lon":       lon,
+            "geo_source":source,
+            "nearest_airport": airport.to_dict() if airport else None,
+            "providers": geocoding_status(),
+        })
+    return jsonify({
+        "place":   place,
+        "error":   "Could not geocode this place",
+        "providers": geocoding_status(),
+    }), 404

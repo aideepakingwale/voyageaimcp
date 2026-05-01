@@ -190,8 +190,23 @@ class MCPRelevanceScorer:
                     pass
 
         if not dest:
-            dest    = "LIS"  # absolute last resort
-            country = "PT" 
+            # Try reference cache with any word in the text
+            try:
+                from core.reference_cache import ref as _r2
+                if not _r2._built: _r2.build()
+                for word in text.split():
+                    w = word.strip(".,()").lower()
+                    if len(w) >= 4:
+                        _iata = _r2.city_to_iata(w)
+                        if _iata:
+                            dest    = _iata
+                            country = (_r2.airport(_iata) or {}).get("country_code","")
+                            break
+            except Exception:
+                pass
+        if not dest:
+            dest    = "LHR"  # absolute last resort
+            country = "GB" 
 
         # ── Extract other params from text ─────────────────────
         # Guests/budget: entities first (from universal_extractor), then text

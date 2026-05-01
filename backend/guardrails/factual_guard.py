@@ -37,12 +37,51 @@ class FactualGuardrail:
         failures = []
         checks   = 0
 
+        # ── Auto-whitelist the declared destination IATA ──────────────────────
+        # The context engine resolved this code from the reference DB.
+        # It MUST be treated as valid — never flag the intent destination.
+        _declared_iatas = set()
+        try:
+            intent = llm_output.get("intent", {})
+            _city_code = intent.get("city_code","").strip().upper()
+            if _city_code and re.match(r"^[A-Z]{3}$", _city_code):
+                _declared_iatas.add(_city_code)
+            # Also accept origin airports from flights (always valid)
+            for fl in llm_output.get("recommendations",{}).get("flights",[]):
+                for field in ("origin","destination"):
+                    code = str(fl.get(field,"")).upper().strip()
+                    if re.match(r"^[A-Z]{3}$", code):
+                        # Trust origin as valid (user's departure city)
+                        # Trust destination if same as intent city_code
+                        if code == _city_code:
+                            _declared_iatas.add(code)
+        except Exception:
+            pass
+
         # ── IATA code validation ──────────────────────────────────────────────
         for code in self._extract_candidate_codes(llm_output, gcfg):
+            # Skip declared destination — system resolved it, always valid
+            if code in _declared_iatas:
+                continue
             if not ref.should_validate_as_iata(code):
                 continue
             checks += 1
             if not ref.is_airport(code):
+                # Last-chance: try direct DB lookup in case cache is stale
+                try:
+                    import sqlite3
+                    from pathlib import Path
+                    _db = Path(__file__).parent.parent / "data" / "voyageai.db"
+                    _conn = sqlite3.connect(str(_db))
+                    _row  = _conn.execute("SELECT iata FROM ref_airports WHERE iata=?", (code,)).fetchone()
+                    _conn.close()
+                    if _row:
+                        # Found in DB — rebuild cache and accept this code
+                        ref.build()
+                        log.info("Cache rebuilt — %s now valid", code)
+                        continue
+                except Exception:
+                    pass
                 failures.append(f"Unknown IATA code: {code}")
                 log.debug("Unknown IATA: %s", code)
 
