@@ -153,7 +153,10 @@ def _parse(offer, adults):
         carrier = first["carrierCode"]
         price   = float(offer["price"]["grandTotal"])
         dur     = _dur(itin.get("duration",""))
-        seats   = offer.get("numberOfBookableSeats", 9)
+        seats   = offer.get("numberOfBookableSeats", adults + 4)
+        # Skip offers that don't have enough seats — try next offer
+        if int(seats) < adults:
+            return None  # caller will try next offer
         cabin   = (offer["travelerPricings"][0]["fareDetailsBySegment"][0]
                    .get("cabin","ECONOMY"))
         return {
@@ -212,7 +215,7 @@ def _realistic_flights(origin, dest, date, adults, direct):
             "cabin":           "ECONOMY",
             "price_gbp":       total,
             "price_per_adult": ppp,
-            "seats_available": random.randint(2,9),
+            "seats_available": max(adults + 2, random.randint(4, 9)),
             "bookable":        True,
             "source":          "estimated",
         })

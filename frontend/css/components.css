@@ -568,3 +568,19 @@ textarea::placeholder { color: var(--dim); }
   color:       var(--red);
   animation:   voicePulse 1.2s ease-in-out infinite;
 }
+
+/* ── Recovery quick-reply pills ─────────────────────────────── */
+.recovery-pill {
+  padding:       5px 12px;
+  background:    rgba(0,212,170,.08);
+  border:        1px solid rgba(0,212,170,.3);
+  border-radius: 16px;
+  color:         var(--teal);
+  font-family:   var(--mono);
+  font-size:     11px;
+  cursor:        pointer;
+  transition:    background .15s, transform .1s;
+  white-space:   nowrap;
+}
+.recovery-pill:hover  { background: rgba(0,212,170,.18); }
+.recovery-pill:active { transform: scale(.97); }

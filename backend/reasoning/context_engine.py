@@ -232,12 +232,9 @@ def resolve_destination(text: str, exclude_iata: str = None) -> tuple[str | None
     """
     text_l = text.lower().strip()
 
-    # 1. Check region map (longest match first)
-    for region in sorted(REGION_MAP, key=len, reverse=True):
-        if region in text_l:
-            iata = REGION_MAP[region]
-            if iata != exclude_iata:
-                return region.title(), iata
+    # 1. Reference cache covers all region aliases (loaded from DB including region_map entries)
+    # No separate REGION_MAP lookup needed — ref.city_to_iata() handles "north india" → DEL
+    # (the DB was populated from the old REGION_MAP on first run)
 
     # 2. Reference cache (includes Indian holy cities loaded from DB)
     try:

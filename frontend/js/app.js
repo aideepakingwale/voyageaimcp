@@ -376,6 +376,35 @@ async function _handleResponse(data) {
   }
 
   // ── Human handoff ────────────────────────────────────────
+  if (status === 'no_availability') {
+    const msg = data.message || 'No flights available for this route and date.';
+    // If we also have suggestions, show them
+    if (data.suggestions?.length) {
+      appendAI(_renderSuggestions(msg, data.suggestions));
+    } else {
+      // Format the message as a structured card
+      const htmlMsg = msg
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/
+
+/g, '<br><br>')
+        .replace(/
+• /g, '<br>• ');
+      appendAI(
+        `<div style="padding:14px 18px;border:1px solid rgba(245,166,35,.3);
+           border-radius:10px;background:rgba(245,166,35,.05);">
+          <div style="font-weight:700;color:var(--amber);margin-bottom:8px">
+            ✈ No Flights Available
+          </div>
+          <div style="color:var(--muted);font-size:13px;line-height:1.6">
+            ${htmlMsg}
+          </div>
+         </div>`
+      );
+    }
+    return;
+  }
+
   if (status === 'human_handoff') {
     appendAI(`🤝 <strong style="color:var(--amber)">Our specialists will assist you.</strong><br>
       <span style="color:var(--muted)">The AI couldn't complete this with enough confidence. 
@@ -615,6 +644,16 @@ function _renderSuggestions(text, suggestions) {
     </div>
   </div>`;
 }
+
+// Send any message directly (used by recovery quick-reply pills)
+window.sendMessage = function(msg) {
+  const ta = document.getElementById('messageInput');
+  if (ta && msg) {
+    ta.value = msg;
+    ta.dispatchEvent(new Event('input'));
+    setTimeout(() => document.getElementById('sendBtn')?.click(), 80);
+  }
+};
 
 window._pickSuggestion = function(el) {
   // Get destination name and iata from the card

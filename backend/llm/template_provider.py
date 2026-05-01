@@ -181,80 +181,14 @@ class TemplateProvider(BaseProvider):
         ret_date = (datetime.strptime(dep_date, "%Y-%m-%d") +
                     timedelta(days=nights)).strftime("%Y-%m-%d")
 
-        # Generate flight and hotel data based on DEST CODE — never reuse old plan data
-        # Destination-aware airlines and hotel names
-        DEST_AIRLINES = {
-            "EAS":"Iberia IB3163","BCN":"Vueling VY7823","MAD":"Iberia IB3401",
-            "LIS":"TAP Air Portugal TP1363","FCO":"Ryanair FR2341","CDG":"Air France AF1680",
-            "AMS":"KLM KL1023","ATH":"EasyJet EZY2301","IST":"Turkish Airlines TK1985",
-            "DXB":"Emirates EK007","DOH":"Qatar Airways QR005","AUH":"Etihad Airways EY011",
-            "DEL":"British Airways BA256","BOM":"Jet Airways 9W119","GOI":"IndiGo 6E207",
-            "VNS":"Air India AI219","ATQ":"SpiceJet SG102","DED":"IndiGo 6E413",
-            "BLR":"Air India AI503","MAA":"British Airways BA2051","COK":"Air India AI541",
-            "HYD":"British Airways BA2053","CCU":"Air India AI211",
-            "SEZ":"Air Seychelles HM051","MLE":"British Airways BA2085",
-            "MRU":"Air Mauritius MK053","BKK":"Thai Airways TG910",
-            "SIN":"Singapore Airlines SQ317","NRT":"British Airways BA005",
-            "HKG":"Cathay Pacific CX253","SYD":"Qantas QF1","JFK":"British Airways BA177",
-            "LAX":"Virgin Atlantic VS007","CPT":"British Airways BA059",
-            "NBO":"Kenya Airways KQ101","CMN":"Royal Air Maroc AT800",
-            "RAK":"EasyJet EZY8901","DPS":"Singapore Airlines SQ347",
-            "KUL":"Malaysia Airlines MH003","REP":"Bangkok Airways PG703",
-            "CMB":"SriLankan Airlines UL504","KTM":"Air India AI218",
-        }
-        DEST_HOTELS = {
-            "EAS":("Hotel Maria Cristina",5,380),"BCN":("W Barcelona",5,290),
-            "MAD":("Mandarin Oriental Ritz",5,420),"LIS":("Bairro Alto Hotel",5,310),
-            "FCO":("Hotel de la Ville",5,350),"CDG":("Le Bristol Paris",5,480),
-            "AMS":("Waldorf Astoria Amsterdam",5,420),"ATH":("Hotel Grande Bretagne",5,380),
-            "IST":("Shangri-La Bosphorus",5,310),"DXB":("Burj Al Arab",7,890),
-            "DOH":("St. Regis Doha",5,420),"AUH":("Emirates Palace",5,650),
-            "DEL":("The Leela Palace New Delhi",5,280),"BOM":("Taj Mahal Palace",5,320),
-            "GOI":("Taj Exotica Goa",5,220),"VNS":("Taj Ganges Varanasi",5,180),
-            "ATQ":("Taj Swarna Amritsar",5,160),"DED":("Ananda in the Himalayas",5,350),
-            "BLR":("The Leela Palace Bengaluru",5,240),"MAA":("ITC Grand Chola",5,200),
-            "COK":("Kumarakom Lake Resort",5,190),"HYD":("ITC Kohenur",5,210),
-            "CCU":("The Oberoi Grand Kolkata",5,200),"SEZ":("North Island Seychelles",5,950),
-            "MLE":("Soneva Jani Maldives",5,1200),"MRU":("The St. Regis Mauritius",5,520),
-            "BKK":("Capella Bangkok",5,380),"SIN":("Marina Bay Sands",5,420),
-            "NRT":("Park Hyatt Tokyo",5,380),"HKG":("The Peninsula Hong Kong",5,450),
-            "SYD":("Park Hyatt Sydney",5,360),"JFK":("The Dominick NYC",5,380),
-            "LAX":("Beverly Wilshire",5,480),"CPT":("One&Only Cape Town",5,420),
-            "NBO":("Giraffe Manor",5,1200),"CMN":("Sofitel Casablanca",5,220),
-            "RAK":("Royal Mansour Marrakech",5,480),"DPS":("Four Seasons Bali",5,380),
-            "KUL":("Mandarin Oriental KL",5,220),"CMB":("Taj Samudra Colombo",5,180),
-        }
+        # ── Flights: MCP data first → Amadeus API → realistic estimate ────────
+        # Priority: real MCP data already fetched → Amadeus → distance model
+        airline, fnum, fprice = _get_flight_data(dest_code, origin_iata, guests,
+                                                   mcp_flights, departure_date)
 
-        # Get airline and hotel for the CURRENT destination (not old plan data)
-        default_airline = f"British Airways BA{abs(hash(dest_code)) % 9000 + 100:04d}"
-        airline_full    = DEST_AIRLINES.get(dest_code, default_airline)
-        # Split airline name and flight number
-        parts   = airline_full.rsplit(' ', 1)
-        airline = parts[0] if len(parts) == 2 else airline_full
-        fnum    = parts[1] if len(parts) == 2 else "BA001"
-
-        # Destination-aware price estimation (distance from LHR)
-        BASE_PRICES = {
-            "EU": 150, "IN": 420, "AS": 480, "AF": 380, "AM": 520, "OC": 780
-        }
-        IATA_REGION = {
-            "EAS":"EU","BCN":"EU","MAD":"EU","LIS":"EU","FCO":"EU","CDG":"EU",
-            "AMS":"EU","ATH":"EU","IST":"EU",
-            "DXB":"AS","DOH":"AS","AUH":"AS",
-            "DEL":"IN","BOM":"IN","GOI":"IN","VNS":"IN","ATQ":"IN","DED":"IN",
-            "BLR":"IN","MAA":"IN","COK":"IN","HYD":"IN","CCU":"IN",
-            "SEZ":"AF","MLE":"AS","MRU":"AF","BKK":"AS","SIN":"AS",
-            "NRT":"AS","HKG":"AS","SYD":"OC","JFK":"AM","LAX":"AM","CPT":"AF",
-            "NBO":"AF","CMN":"AF","RAK":"AF","DPS":"AS","KUL":"AS","CMB":"AS",
-        }
-        region    = IATA_REGION.get(dest_code, "EU")
-        base_pp   = BASE_PRICES.get(region, 300)
-        fprice    = round(base_pp * guests * (1 + (nights - 7) * 0.02), 2)
-
-        # Hotel — use stars from prompt extraction (defined below), default 4 if not yet set
-        _default_stars = 4
-        hname, hstars, hppn = DEST_HOTELS.get(dest_code, (f"Luxury Hotel {dest_code}", _default_stars, 250))
-        hppn = hppn * max(1, guests // 2)  # scale for group size
+        # ── Hotels: MCP data first → Amadeus → generic placeholder ───────────
+        hname, hstars, hppn = _get_hotel_data(dest_code, stars, guests, nights,
+                                               mcp_hotels, city=dest_city)
 
         hotel_total = round(hppn * nights, 2)
         transfer    = 65
@@ -454,29 +388,74 @@ class TemplateProvider(BaseProvider):
     def _build_suggestions(self, prompt: str) -> dict:
         """
         Delegate ALL suggestion generation to the LLM.
-        The LLM uses its full world knowledge — no hardcoded destination lists.
-        It understands any natural language: emotions, themes, activities, regions.
+        Falls back to thematic_fallback when LLM unavailable (no Groq/Gemini keys),
+        ensuring suggestions stay on-topic rather than returning generic fillers.
         """
         try:
-            from reasoning.llm_destination_suggester import suggest_destinations_with_llm
+            from reasoning.llm_destination_suggester import (
+                suggest_destinations_with_llm, _thematic_fallback, _build_summary
+            )
             result = suggest_destinations_with_llm(
                 query=prompt,
                 customer_profile=None,
                 conversation_history=None,
                 last_itinerary=None,
             )
+            # Validate that results are actually relevant (not DEL/LIS fallback from template)
             if result and result.get("suggestions"):
-                return result
+                suggestions = result["suggestions"]
+                # If the only suggestion is DEL or LIS it means template provider ran
+                # — these are planning-prompt defaults, not real suggestion results
+                # Filter out template-generated "suggestions" where dest equals IATA
+                # (e.g. {"destination":"DEL","iata":"UNK"} means template planning ran, not suggestion)
+                def _is_real_suggestion(s):
+                    dest = s.get("destination","")
+                    iata = s.get("iata","")
+                    tagline = s.get("tagline","")
+                    # Real suggestions have a city NAME (not just an IATA code) and a proper tagline
+                    return (dest not in {"DEL","LIS","CDG","FCO","LHR","GOI","DXB","BKK"}
+                            and len(dest) > 3
+                            and not dest.startswith("Explore ")
+                            and len(tagline) > 10)
+                valid = [s for s in suggestions if _is_real_suggestion(s)]
+                if len(valid) >= 2:
+                    result["suggestions"] = valid
+                    return result
         except Exception as e:
             import logging
             logging.getLogger("voyageai.llm").debug("LLM suggester error: %s", e)
 
+        # LLM unavailable or returned dummy results — use thematic fallback
+        # This stays within the geographic/thematic scope of the query
+        try:
+            from reasoning.llm_destination_suggester import _thematic_fallback, _build_summary
+            suggestions = _thematic_fallback(prompt.lower(), set())
+            if suggestions:
+                summary = _build_summary(prompt, suggestions)
+                return {
+                    "is_suggestions":  True,
+                    "suggestions":     suggestions,
+                    "summary":         summary,
+                    "intent":          {
+                        "destination":  suggestions[0].get("destination",""),
+                        "city_code":    suggestions[0].get("iata",""),
+                        "dates":        {},
+                        "guests":       2,
+                        "budget_gbp":   suggestions[0].get("budget_pp_gbp", 3000),
+                    },
+                    "destinations":    [s.get("destination") for s in suggestions],
+                    "total_cost_gbp":  0,
+                    "recommendations": {"flights":[],"hotels":[],"experiences":[]},
+                    "confidence_scores": {"overall": 0.80},
+                    "_source":         "thematic_fallback",
+                }
+        except Exception:
+            pass
+
         return {
             "is_suggestions":  True,
             "summary":         ("I'd love to help! Could you tell me a bit more about "
-                                "the kind of experience you're after? "
-                                "For example: relaxing beach, spiritual journey, adventure, "
-                                "cultural immersion, food and wine, family fun…"),
+                                "the kind of experience you're after?"),
             "suggestions":     [],
             "intent":          {"destination":"","city_code":"","dates":{},"guests":2,"budget_gbp":3000},
             "destinations":    [],

@@ -46,20 +46,27 @@ class BusinessRulesGuardrail:
         if int(nights) < 1:
             violations.append("Minimum 1 night stay required")
 
-        # Rule 4: Seat availability
+        # Rule 4: Seat availability — always a hard violation
         for flight in recs.get("flights", []):
             seats = flight.get("seats_available", 99)
             if int(seats) < int(guests):
                 violations.append(
-                    f"Flight {flight.get('flight_number','')} has only {seats} seats for {guests} guests"
+                    f"Flight {flight.get('flight_number','flight')} "
+                    f"has only {seats} seats for {guests} guests"
                 )
 
         if violations:
             return GuardrailResult(
-                passed=False, layer="L2c_BUSINESS_RULES",
-                reason="; ".join(violations),
-                action="block",
-                data={"violations": violations},
+                passed  = False,
+                layer   = "L2c_BUSINESS_RULES",
+                reason  = "; ".join(violations),
+                action  = "recover",   # always → intelligent_recovery, never blind retry
+                data    = {
+                    "violations":       violations,
+                    "guests_requested": guests,
+                    "total_cost_gbp":   total,
+                    "budget_gbp":       budget,
+                },
             )
 
         return GuardrailResult(passed=True, layer="L2c_BUSINESS_RULES", action="proceed")

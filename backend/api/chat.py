@@ -14,7 +14,8 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 
 from rag.memory_store   import memory_store
-from reasoning.engine   import ReasoningEngine
+from reasoning.engine              import ReasoningEngine
+from reasoning.intelligent_recovery import analyse_failure, build_recovery_response
 from reasoning.context_engine import understand, resolve_destination
 from data.conversation_store import (
     upsert_conversation, save_turn, save_itinerary_version,
@@ -173,7 +174,12 @@ def _run_plan(session_id, message, action, origin_iata, ctx):
     result["conversation_state"] = "planning"
     result["is_modification"]    = False
 
-    # If engine hit max retries, use the best attempt it had (don't fail silently)
+    # ── No flight availability — show alternatives, not a broken itinerary ─────
+    if result.get("status") == "no_availability":
+        dest     = action.get("destination") or "your destination"
+        guests   = result.get("guests") or action.get("guests", 2)
+        reason   = result.get("reason", "")
+    # ── If engine hit max retries, use best attempt (don't fail silently) ─────
     if result.get("status") == "human_handoff":
         last_good = result.get("_last_successful_output") or result.get("llm_output")
         if last_good and last_good.get("intent") and last_good.get("recommendations"):
