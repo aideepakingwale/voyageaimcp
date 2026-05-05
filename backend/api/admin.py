@@ -239,8 +239,8 @@ def ap_delete(iata):
 def cu_list():
     q=request.args.get("q",""); lim=min(int(request.args.get("limit",200)),500)
     conn=get_db()
-    if q: rows=rows_to_list(conn.execute("SELECT code,name,symbol FROM ref_currencies WHERE code LIKE ? OR name LIKE ? LIMIT ?",(f"%{q}%",f"%{q}%",lim)))
-    else: rows=rows_to_list(conn.execute("SELECT code,name,symbol FROM ref_currencies ORDER BY code LIMIT ?",(lim,)))
+    if q: rows=rows_to_list(conn.execute("SELECT code,name,symbol,decimals FROM ref_currencies WHERE code LIKE ? OR name LIKE ? LIMIT ?",(f"%{q}%",f"%{q}%",lim)))
+    else: rows=rows_to_list(conn.execute("SELECT code,name,symbol,decimals FROM ref_currencies ORDER BY code LIMIT ?",(lim,)))
     conn.close()
     return jsonify({"rows":rows,"total":len(rows)})
 
@@ -250,8 +250,9 @@ def cu_add():
     d=request.get_json() or {}
     code=(d.get("code") or "").strip().upper()
     if not re.match(r"^[A-Z]{3}$",code): return jsonify({"error":"code must be 3 uppercase letters"}),400
+    decimals=int(d.get("decimals",2))
     conn=get_db()
-    conn.execute("INSERT OR REPLACE INTO ref_currencies (code,name,symbol,updated_at) VALUES (?,?,?,?)",(code,d.get("name",""),d.get("symbol",""),time.time()))
+    conn.execute("INSERT OR REPLACE INTO ref_currencies (code,name,symbol,decimals,updated_at) VALUES (?,?,?,?,?)",(code,d.get("name",""),d.get("symbol",""),decimals,time.time()))
     conn.commit(); conn.close(); _reload()
     return jsonify({"ok":True,"code":code})
 
@@ -322,46 +323,72 @@ def cust_add():
     name=(d.get("name") or "").strip(); email=(d.get("email") or "").strip().lower()
     if not name or not email: return jsonify({"error":"name and email required"}),400
     tier=d.get("loyalty_tier","Blue"); points=int(d.get("loyalty_points",0))
+    customer_id=(d.get("id") or "").strip() or f"CUST{int(time.time() * 1000) % 1000000:06d}"
+    member_id=(d.get("member_id") or "").strip().upper()
     tier_code={"Platinum":"PLAT","Gold":"GOLD","Silver":"SILV","Blue":"BLUE"}.get(tier,"BLUE")
-    import random; member_id=f"VGI-{tier_code}-{random.randint(1000,9999)}"
+    if not member_id:
+        import random
+        member_id=f"VGI-{tier_code}-{random.randint(1000,9999)}"
+    interests=d.get("interests",[])
+    if isinstance(interests,str):
+        interests=[s.strip() for s in interests.split(",") if s.strip()]
     conn=get_db()
     try:
-        conn.execute("INSERT INTO customers (member_id,name,email,loyalty_tier,loyalty_points,travel_style,typical_budget_gbp,typical_nights,adults_in_family,children_in_family,interests,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                     (member_id,name,email,tier,points,d.get("travel_style","leisure"),
+        conn.execute("INSERT INTO customers (id,member_id,name,email,loyalty_tier,loyalty_points,travel_style,typical_budget_gbp,typical_nights,adults_in_family,children_in_family,interests,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (customer_id,member_id,name,email,tier,points,d.get("travel_style","leisure"),
                       float(d.get("typical_budget_gbp",3000)),int(d.get("typical_nights",7)),
                       int(d.get("adults_in_family",2)),int(d.get("children_in_family",0)),
-                      json.dumps(d.get("interests",[])),time.time()))
+                      json.dumps(interests),time.time()))
+        conn.execute("INSERT INTO loyalty_accounts (customer_id,member_id,tier,points_balance,points_ytd,total_nights_ytd,total_flights_ytd,member_since,tier_expiry) VALUES (?,?,?,?,?,?,?,?,?)",
+                     (customer_id,member_id,tier,points,0,0,0,d.get("member_since","2026-01-01"),d.get("tier_expiry","2026-12-31")))
         conn.commit()
-        cid=conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.close()
-        return jsonify({"ok":True,"id":cid,"member_id":member_id}),201
+        return jsonify({"ok":True,"id":customer_id,"member_id":member_id}),201
     except sqlite3.IntegrityError:
         conn.close()
         return jsonify({"error":f"Email {email} already exists"}),409
 
-@bp.route("/admin/customers/<int:cid>", methods=["PATCH"])
+@bp.route("/admin/customers/<cid>", methods=["PATCH"])
 @require_admin
 def cust_update(cid):
     d=request.get_json() or {}
-    allowed={"name","email","loyalty_tier","loyalty_points","travel_style","typical_budget_gbp","typical_nights","adults_in_family","children_in_family","interests"}
+    allowed={"name","email","loyalty_tier","loyalty_points","travel_style","typical_budget_gbp","typical_nights","adults_in_family","children_in_family","interests","member_id"}
     sets,params=[],[]
     for field in allowed:
         if field in d:
-            val=json.dumps(d[field]) if field=="interests" else d[field]
+            val=d[field]
+            if field=="interests":
+                if isinstance(val,str):
+                    val=[s.strip() for s in val.split(",") if s.strip()]
+                val=json.dumps(val)
             sets.append(f"{field}=?"); params.append(val)
     if not sets: return jsonify({"error":"No fields to update"}),400
     sets.append("updated_at=?"); params.append(time.time()); params.append(cid)
     conn=get_db()
     conn.execute(f"UPDATE customers SET {', '.join(sets)} WHERE id=?",params)
+    if "member_id" in d or "loyalty_tier" in d or "loyalty_points" in d:
+        la_sets=[]; la_params=[]
+        if "member_id" in d:
+            la_sets.append("member_id=?"); la_params.append((d.get("member_id") or "").strip().upper())
+        if "loyalty_tier" in d:
+            la_sets.append("tier=?"); la_params.append(d.get("loyalty_tier"))
+        if "loyalty_points" in d:
+            la_sets.append("points_balance=?"); la_params.append(int(d.get("loyalty_points",0)))
+        if la_sets:
+            la_params.append(cid)
+            conn.execute(f"UPDATE loyalty_accounts SET {', '.join(la_sets)} WHERE customer_id=?",la_params)
     conn.commit(); conn.close()
     return jsonify({"ok":True,"id":cid})
 
-@bp.route("/admin/customers/<int:cid>", methods=["DELETE"])
+@bp.route("/admin/customers/<cid>", methods=["DELETE"])
 @require_admin
 def cust_delete(cid):
     conn=get_db()
     row=conn.execute("SELECT name FROM customers WHERE id=?",(cid,)).fetchone()
     if not row: conn.close(); return jsonify({"error":"Not found"}),404
+    conn.execute("DELETE FROM loyalty_accounts WHERE customer_id=?",(cid,))
+    conn.execute("DELETE FROM travel_history WHERE customer_id=?",(cid,))
+    conn.execute("DELETE FROM ai_recommendations WHERE customer_id=?",(cid,))
     conn.execute("DELETE FROM customers WHERE id=?",(cid,))
     conn.commit(); conn.close()
     return jsonify({"ok":True,"deleted":cid,"name":row["name"]})

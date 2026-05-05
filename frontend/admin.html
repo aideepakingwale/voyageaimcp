@@ -2,757 +2,711 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoyageAI Admin</title>
 <style>
-:root {
-  --bg:      #0a0e1a;
-  --bg2:     #111827;
-  --bg3:     #1e2535;
-  --border:  rgba(255,255,255,.08);
-  --teal:    #00c9a7;
-  --amber:   #f59e0b;
-  --red:     #ef4444;
-  --text:    #e2e8f0;
-  --muted:   #94a3b8;
-  --dim:     #475569;
-  --radius:  10px;
-  --font:    'JetBrains Mono', 'Fira Code', monospace;
+:root{
+  --bg:#09111c;
+  --panel:#101b2b;
+  --panel2:#162335;
+  --border:rgba(255,255,255,.08);
+  --text:#e5eef9;
+  --muted:#8ea6c2;
+  --teal:#00c9a7;
+  --red:#ef4444;
+  --amber:#f59e0b;
+  --font:Inter,Segoe UI,Arial,sans-serif;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; min-height: 100vh; }
-
-/* ── Layout ── */
-.shell { display: flex; min-height: 100vh; }
-.sidebar { width: 220px; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
-.main { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-
-/* ── Sidebar ── */
-.logo { padding: 20px 18px 12px; border-bottom: 1px solid var(--border); }
-.logo .title { font-size: 15px; font-weight: 700; color: var(--teal); letter-spacing: .05em; }
-.logo .sub   { font-size: 10px; color: var(--dim); margin-top: 2px; text-transform: uppercase; letter-spacing: .1em; }
-.nav-group { padding: 10px 0; border-bottom: 1px solid var(--border); }
-.nav-label { font-size: 10px; color: var(--dim); padding: 4px 18px; letter-spacing: .12em; text-transform: uppercase; }
-.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; cursor: pointer; color: var(--muted); transition: all .15s; }
-.nav-item:hover   { background: rgba(0,201,167,.06); color: var(--text); }
-.nav-item.active  { background: rgba(0,201,167,.1);  color: var(--teal); border-right: 2px solid var(--teal); }
-.nav-item .icon   { width: 16px; text-align: center; flex-shrink: 0; }
-.stats-bar { margin-top: auto; padding: 14px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--dim); }
-.stat-row  { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.stat-row span:last-child { color: var(--teal); font-weight: 700; }
-
-/* ── Header ── */
-.header { padding: 16px 28px; border-bottom: 1px solid var(--border); background: var(--bg2); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.header h1 { font-size: 16px; font-weight: 700; }
-.header .actions { display: flex; gap: 8px; }
-.toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 18px; border-radius: 8px; font-size: 12px; z-index: 9999; transform: translateY(60px); opacity: 0; transition: all .25s; pointer-events: none; }
-.toast.show { transform: translateY(0); opacity: 1; }
-.toast.ok   { background: rgba(0,201,167,.15); border: 1px solid var(--teal); color: var(--teal); }
-.toast.err  { background: rgba(239,68,68,.15);  border: 1px solid var(--red);  color: var(--red); }
-
-/* ── Content ── */
-.content { flex: 1; overflow-y: auto; padding: 24px 28px; }
-.section { display: none; }
-.section.active { display: block; }
-
-/* ── Toolbar ── */
-.toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
-.search  { flex: 1; min-width: 180px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; }
-.search:focus { border-color: var(--teal); }
-.select { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; cursor: pointer; }
-.btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-family: var(--font); font-size: 12px; font-weight: 600; letter-spacing: .03em; transition: all .15s; display: flex; align-items: center; gap: 6px; }
-.btn-primary { background: var(--teal); color: #040c18; }
-.btn-primary:hover { filter: brightness(1.1); }
-.btn-ghost { background: var(--bg3); border: 1px solid var(--border); color: var(--muted); }
-.btn-ghost:hover { border-color: var(--teal); color: var(--teal); }
-.btn-danger { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.3); color: var(--red); }
-.btn-danger:hover { background: rgba(239,68,68,.2); }
-.btn-sm { padding: 4px 10px; font-size: 11px; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: .05em; }
-.badge-teal   { background: rgba(0,201,167,.15); color: var(--teal); }
-.badge-amber  { background: rgba(245,158,11,.15); color: var(--amber); }
-.badge-red    { background: rgba(239,68,68,.15);  color: var(--red); }
-.badge-dim    { background: rgba(71,85,105,.3);   color: var(--muted); }
-
-/* ── Table ── */
-.table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-table { width: 100%; border-collapse: collapse; }
-th { background: var(--bg3); padding: 10px 14px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); font-weight: 700; border-bottom: 1px solid var(--border); }
-td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
-tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(255,255,255,.02); }
-.code { font-family: var(--font); color: var(--teal); font-size: 12px; }
-td.actions { display: flex; gap: 6px; justify-content: flex-end; }
-
-/* ── Modal ── */
-.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; }
-.overlay.open { display: flex; }
-.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; width: min(520px,92vw); max-height: 85vh; overflow-y: auto; }
-.modal-head { padding: 18px 22px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-.modal-head h2 { font-size: 14px; font-weight: 700; }
-.modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; }
-.modal-body { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
-.modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field label { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); }
-.field input, .field select, .field textarea {
-  background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
-  padding: 9px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none;
-  transition: border-color .15s;
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font)}
+.layout{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+.sidebar{background:var(--panel);border-right:1px solid var(--border);padding:20px}
+.brand{font-size:20px;font-weight:700;margin-bottom:8px}
+.sub{font-size:12px;color:var(--muted);margin-bottom:24px}
+.token-box{display:grid;gap:8px;margin-bottom:20px}
+.token-box label,.field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.token-row{display:grid;grid-template-columns:1fr auto;gap:8px}
+input,textarea,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel2);color:var(--text)}
+textarea{min-height:90px;resize:vertical}
+button{border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+.btn-primary{background:var(--teal);color:#041019}
+.btn-ghost{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+.btn-danger{background:rgba(239,68,68,.14);color:#ffb4b4;border:1px solid rgba(239,68,68,.3)}
+.nav{display:grid;gap:8px}
+.nav button{text-align:left;background:transparent;color:var(--muted);border:1px solid transparent}
+.nav button.active{background:rgba(0,201,167,.1);color:var(--teal);border-color:rgba(0,201,167,.25)}
+.main{padding:24px 28px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px}
+.title{font-size:24px;font-weight:700}
+.status{font-size:13px;color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px}
+.hidden{display:none}
+.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+.toolbar-left,.toolbar-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
+.stat .k{font-size:12px;color:var(--muted)}
+.stat .v{font-size:24px;font-weight:700;margin-top:6px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;vertical-align:top}
+th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:rgba(0,201,167,.12);color:var(--teal);font-size:12px}
+.row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.split{display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:18px}
+.form-grid{display:grid;gap:12px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.notice{padding:12px 14px;border-radius:12px;background:rgba(245,158,11,.12);color:#ffd28a;border:1px solid rgba(245,158,11,.22);font-size:13px}
+.empty{padding:28px 10px;color:var(--muted);text-align:center}
+.small{font-size:12px;color:var(--muted)}
+@media (max-width: 980px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{border-right:0;border-bottom:1px solid var(--border)}
+  .split{grid-template-columns:1fr}
 }
-.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--teal); }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.empty { text-align: center; padding: 40px; color: var(--dim); }
-.count { font-size: 11px; color: var(--dim); }
-.tier-badge.Platinum { background: rgba(168,85,247,.15); color: #c084fc; }
-.tier-badge.Gold     { background: rgba(245,158,11,.15); color: var(--amber); }
-.tier-badge.Silver   { background: rgba(148,163,184,.15); color: #cbd5e1; }
-.tier-badge.Blue     { background: rgba(59,130,246,.15);  color: #60a5fa; }
-.toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.toggle input { width: 36px; height: 20px; appearance: none; background: var(--dim); border-radius: 10px; position: relative; cursor: pointer; transition: background .2s; }
-.toggle input:checked { background: var(--teal); }
-.toggle input::after { content:''; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: white; top: 3px; left: 3px; transition: left .2s; }
-.toggle input:checked::after { left: 19px; }
-
-/* ── Danger zone ── */
-.danger-zone { margin-top: 16px; border: 1px solid rgba(239,68,68,.2); border-radius: 10px; padding: 14px 18px; }
-.danger-title { font-size: 11px; color: var(--red); font-weight: 700; margin-bottom: 10px; letter-spacing: .05em; }
 </style>
 </head>
 <body>
-<div class="shell">
-
-<!-- ── SIDEBAR ── -->
-<nav class="sidebar">
-  <div class="logo">
-    <div class="title">✈ VoyageAI</div>
-    <div class="sub">Admin Console</div>
-  </div>
-  <div class="nav-group">
-    <div class="nav-label">Guardrail Config</div>
-    <div class="nav-item active" onclick="nav('config')">         <span class="icon">⚙</span> Thresholds</div>
-    <div class="nav-item" onclick="nav('skip')">                  <span class="icon">🚫</span> Skip Codes</div>
-    <div class="nav-item" onclick="nav('injection')">             <span class="icon">🛡</span> Injection Patterns</div>
-    <div class="nav-item" onclick="nav('signals')">               <span class="icon">📡</span> Travel Signals</div>
-  </div>
-  <div class="nav-group">
-    <div class="nav-label">Reference Data</div>
-    <div class="nav-item" onclick="nav('airports')">              <span class="icon">🛫</span> Airports</div>
-    <div class="nav-item" onclick="nav('currencies')">            <span class="icon">💱</span> Currencies</div>
-    <div class="nav-item" onclick="nav('rates')">                 <span class="icon">📈</span> GBP Rates</div>
-  </div>
-  <div class="nav-group">
-    <div class="nav-label">Master Data</div>
-    <div class="nav-item" onclick="nav('customers')">             <span class="icon">👤</span> Customers</div>
-  </div>
-  <div class="stats-bar" id="statsBar">Loading…</div>
-</nav>
-
-<!-- ── MAIN ── -->
-<div class="main">
-  <div class="header">
-    <h1 id="pageTitle">Thresholds & Limits</h1>
-    <div class="actions">
-      <button class="btn btn-ghost" onclick="reloadCaches()">↺ Reload Caches</button>
-    </div>
-  </div>
-  <div class="content">
-
-    <!-- ── CONFIG ── -->
-    <div class="section active" id="sec-config">
-      <div class="toolbar">
-        <span class="count" id="configCount"></span>
-        <button class="btn btn-primary" onclick="openModal('config')">+ Add Setting</button>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">VoyageAI Admin</div>
+    <div class="sub">Reference and customer data</div>
+    <div class="token-box">
+      <label for="adminToken">Admin Token</label>
+      <div class="token-row">
+        <input id="adminToken" type="password" placeholder="voyageai-admin-2026">
+        <button class="btn-primary" id="saveTokenBtn" type="button">Save</button>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Key</th><th>Value</th><th>Type</th><th>Description</th><th style="width:90px"></th></tr></thead>
-        <tbody id="configBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
-      </table></div>
+      <div class="small">This panel uses the same token as the admin API.</div>
     </div>
+    <div class="nav">
+      <button class="active" type="button" data-view="overview">Overview</button>
+      <button type="button" data-view="customers">Customers</button>
+      <button type="button" data-view="airports">Airports</button>
+      <button type="button" data-view="currencies">Currencies</button>
+      <button type="button" data-view="rates">GBP Rates</button>
+    </div>
+  </aside>
 
-    <!-- ── SKIP CODES ── -->
-    <div class="section" id="sec-skip">
-      <div class="toolbar">
-        <input class="search" id="skipSearch" placeholder="Search code…" oninput="filterSkip()">
-        <select class="select" id="skipCatFilter" onchange="filterSkip()"><option value="">All categories</option></select>
-        <span class="count" id="skipCount"></span>
-        <button class="btn btn-primary" onclick="openModal('skip')">+ Add Code</button>
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="title" id="pageTitle">Overview</div>
+        <div class="status" id="pageStatus">Checking admin access...</div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Code</th><th>Category</th><th>Description</th><th style="width:80px"></th></tr></thead>
-        <tbody id="skipBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
-      </table></div>
     </div>
 
-    <!-- ── INJECTION ── -->
-    <div class="section" id="sec-injection">
-      <div class="toolbar">
-        <span class="count" id="injCount"></span>
-        <button class="btn btn-primary" onclick="openModal('injection')">+ Add Pattern</button>
+    <section id="view-overview">
+      <div class="stats" id="statsGrid"></div>
+      <div class="card">
+        <div class="notice">
+          The old guardrail and prompt-tuning controls were removed from this admin surface because those behaviors are now largely dynamic and LLM-driven.
+          This panel now focuses on the data that still benefits from direct CRUD management: customers and reference tables.
+        </div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Pattern</th><th>Description</th><th>Status</th><th style="width:100px"></th></tr></thead>
-        <tbody id="injBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
-      </table></div>
-    </div>
+    </section>
 
-    <!-- ── TRAVEL SIGNALS ── -->
-    <div class="section" id="sec-signals">
-      <div class="toolbar">
-        <select class="select" id="sigCatFilter" onchange="loadSignals()"><option value="">All categories</option><option>CORE</option><option>MODIFICATION</option><option>DESTINATION</option></select>
-        <span class="count" id="sigCount"></span>
-        <button class="btn btn-primary" onclick="openModal('signal')">+ Add Signal</button>
+    <section id="view-customers" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Customer Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetCustomerBtn">New</button></div>
+          </div>
+          <div class="form-grid">
+            <input type="hidden" id="customerId">
+            <div class="field-row">
+              <div class="field"><label for="customerName">Name</label><input id="customerName"></div>
+              <div class="field"><label for="customerEmail">Email</label><input id="customerEmail" type="email"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="customerMemberId">Member ID</label><input id="customerMemberId" placeholder="VGI-GOLD-1001"></div>
+              <div class="field"><label for="customerTier">Tier</label>
+                <select id="customerTier">
+                  <option>Blue</option>
+                  <option>Silver</option>
+                  <option>Gold</option>
+                  <option>Platinum</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="customerPoints">Points</label><input id="customerPoints" type="number" min="0"></div>
+              <div class="field"><label for="customerStyle">Travel Style</label>
+                <select id="customerStyle">
+                  <option>leisure</option>
+                  <option>family</option>
+                  <option>business</option>
+                  <option>adventure</option>
+                  <option>luxury</option>
+                  <option>budget</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="customerBudget">Typical Budget GBP</label><input id="customerBudget" type="number" min="0" step="0.01"></div>
+              <div class="field"><label for="customerNights">Typical Nights</label><input id="customerNights" type="number" min="1"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="customerAdults">Adults in Family</label><input id="customerAdults" type="number" min="1"></div>
+              <div class="field"><label for="customerChildren">Children in Family</label><input id="customerChildren" type="number" min="0"></div>
+            </div>
+            <div class="field">
+              <label for="customerInterests">Interests</label>
+              <textarea id="customerInterests" placeholder="beach, food, family"></textarea>
+            </div>
+            <div class="row-actions">
+              <button class="btn-primary" type="button" id="saveCustomerBtn">Save Customer</button>
+              <button class="btn-danger hidden" type="button" id="deleteCustomerBtn">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Customers</strong></div>
+            <div class="toolbar-right"><input id="customerSearch" placeholder="Search customer"></div>
+          </div>
+          <table>
+            <thead><tr><th>Name</th><th>Member</th><th>Tier</th><th>Style</th><th></th></tr></thead>
+            <tbody id="customersTable"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Signal / Keyword</th><th>Category</th><th style="width:80px"></th></tr></thead>
-        <tbody id="sigBody"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
-      </table></div>
-    </div>
+    </section>
 
-    <!-- ── AIRPORTS ── -->
-    <div class="section" id="sec-airports">
-      <div class="toolbar">
-        <input class="search" id="apSearch" placeholder="Search IATA, city, country…" oninput="loadAirports()">
-        <span class="count" id="apCount"></span>
-        <button class="btn btn-primary" onclick="openModal('airport')">+ Add Airport</button>
+    <section id="view-airports" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Airport Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetAirportBtn">New</button></div>
+          </div>
+          <div class="form-grid">
+            <div class="field-row">
+              <div class="field"><label for="airportIata">IATA</label><input id="airportIata" maxlength="3"></div>
+              <div class="field"><label for="airportCountry">Country Code</label><input id="airportCountry" maxlength="2"></div>
+            </div>
+            <div class="field"><label for="airportName">Airport Name</label><input id="airportName"></div>
+            <div class="field"><label for="airportCity">City</label><input id="airportCity"></div>
+            <div class="field-row">
+              <div class="field"><label for="airportLat">Latitude</label><input id="airportLat" type="number" step="0.0001"></div>
+              <div class="field"><label for="airportLon">Longitude</label><input id="airportLon" type="number" step="0.0001"></div>
+            </div>
+            <div class="row-actions">
+              <button class="btn-primary" type="button" id="saveAirportBtn">Save Airport</button>
+              <button class="btn-danger hidden" type="button" id="deleteAirportBtn">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Airports</strong></div>
+            <div class="toolbar-right"><input id="airportSearch" placeholder="Search airport"></div>
+          </div>
+          <table>
+            <thead><tr><th>IATA</th><th>Name</th><th>City</th><th>Country</th><th></th></tr></thead>
+            <tbody id="airportsTable"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>IATA</th><th>Name</th><th>City</th><th>Country</th><th>Lat</th><th>Lon</th><th style="width:80px"></th></tr></thead>
-        <tbody id="apBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-      </table></div>
-    </div>
+    </section>
 
-    <!-- ── CURRENCIES ── -->
-    <div class="section" id="sec-currencies">
-      <div class="toolbar">
-        <input class="search" id="curSearch" placeholder="Search code or name…" oninput="loadCurrencies()">
-        <span class="count" id="curCount"></span>
-        <button class="btn btn-primary" onclick="openModal('currency')">+ Add Currency</button>
+    <section id="view-currencies" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Currency Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetCurrencyBtn">New</button></div>
+          </div>
+          <div class="form-grid">
+            <div class="field-row">
+              <div class="field"><label for="currencyCode">Code</label><input id="currencyCode" maxlength="3"></div>
+              <div class="field"><label for="currencySymbol">Symbol</label><input id="currencySymbol"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="currencyName">Name</label><input id="currencyName"></div>
+              <div class="field"><label for="currencyDecimals">Decimals</label><input id="currencyDecimals" type="number" min="0" max="6" value="2"></div>
+            </div>
+            <div class="row-actions">
+              <button class="btn-primary" type="button" id="saveCurrencyBtn">Save Currency</button>
+              <button class="btn-danger hidden" type="button" id="deleteCurrencyBtn">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Currencies</strong></div>
+            <div class="toolbar-right"><input id="currencySearch" placeholder="Search currency"></div>
+          </div>
+          <table>
+            <thead><tr><th>Code</th><th>Name</th><th>Symbol</th><th>Decimals</th><th></th></tr></thead>
+            <tbody id="currenciesTable"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Code</th><th>Name</th><th>Symbol</th><th>Decimals</th><th style="width:80px"></th></tr></thead>
-        <tbody id="curBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
-      </table></div>
-    </div>
+    </section>
 
-    <!-- ── GBP RATES ── -->
-    <div class="section" id="sec-rates">
-      <div class="toolbar">
-        <span class="count" id="rateCount"></span>
-        <button class="btn btn-primary" onclick="openModal('rate')">+ Add Rate</button>
+    <section id="view-rates" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>GBP Rate Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetRateBtn">New</button></div>
+          </div>
+          <div class="form-grid">
+            <div class="field-row">
+              <div class="field"><label for="rateCurrency">Currency</label><input id="rateCurrency" maxlength="3"></div>
+              <div class="field"><label for="rateValue">1 GBP =</label><input id="rateValue" type="number" step="0.0001"></div>
+            </div>
+            <div class="row-actions">
+              <button class="btn-primary" type="button" id="saveRateBtn">Save Rate</button>
+              <button class="btn-danger hidden" type="button" id="deleteRateBtn">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>GBP Rates</strong></div>
+          </div>
+          <table>
+            <thead><tr><th>Currency</th><th>Rate</th><th>Updated</th><th></th></tr></thead>
+            <tbody id="ratesTable"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Currency</th><th>1 GBP =</th><th>Updated</th><th style="width:80px"></th></tr></thead>
-        <tbody id="rateBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
-      </table></div>
-    </div>
-
-    <!-- ── CUSTOMERS ── -->
-    <div class="section" id="sec-customers">
-      <div class="toolbar">
-        <input class="search" id="custSearch" placeholder="Search name, email, member ID…" oninput="loadCustomers()">
-        <span class="count" id="custCount"></span>
-        <button class="btn btn-primary" onclick="openModal('customer')">+ Add Customer</button>
-      </div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Name</th><th>Email</th><th>Member ID</th><th>Tier</th><th>Points</th><th>Style</th><th style="width:100px"></th></tr></thead>
-        <tbody id="custBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-      </table></div>
-    </div>
-
-  </div><!-- /content -->
-</div><!-- /main -->
-</div><!-- /shell -->
-
-<!-- ── MODAL ── -->
-<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
-<div class="modal">
-  <div class="modal-head">
-    <h2 id="modalTitle">Add Item</h2>
-    <button class="modal-close" onclick="closeModal()">✕</button>
-  </div>
-  <div class="modal-body" id="modalBody"></div>
-  <div class="modal-foot">
-    <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-    <button class="btn btn-primary" id="modalSave" onclick="saveModal()">Save</button>
-  </div>
+    </section>
+  </main>
 </div>
-</div>
-
-<!-- ── TOAST ── -->
-<div class="toast" id="toast"></div>
 
 <script>
-const API = 'http://127.0.0.1:5000/api';
-let currentSection = 'config';
-let modalType = '';
-let modalData = {};
-let allSkip = [], allSkipCats = [];
-let allSig = [];
+const API = "http://127.0.0.1:5000/api";
+const TOKEN_KEY = "voyage_admin_token";
 
-// ── Navigation ──────────────────────────────────────────────
-function nav(sec) {
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.getElementById('sec-' + sec).classList.add('active');
-  currentSection = sec;
-  const titles = { config:'Thresholds & Limits', skip:'Skip Codes', injection:'Injection Patterns',
-    signals:'Travel Signals', airports:'Airports', currencies:'Currencies', rates:'GBP Exchange Rates', customers:'Customers' };
-  document.getElementById('pageTitle').textContent = titles[sec] || sec;
-  load(sec);
+const state = {
+  view: "overview",
+  stats: {},
+  customers: [],
+  airports: [],
+  currencies: [],
+  rates: [],
+  selectedCustomer: null,
+  selectedAirport: null,
+  selectedCurrency: null,
+  selectedRate: null,
+};
+
+function qs(id) { return document.getElementById(id); }
+function token() { return qs("adminToken").value.trim(); }
+function setStatus(text) { qs("pageStatus").textContent = text; }
+function escaped(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+function joinInterests(value) {
+  if (Array.isArray(value)) return value.join(", ");
+  return value || "";
+}
+function parseInterests(value) {
+  return String(value || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+function fmtDate(value) {
+  if (!value) return "-";
+  const dt = typeof value === "number" ? new Date(value * 1000) : new Date(value);
+  if (Number.isNaN(dt.getTime())) return String(value);
+  return dt.toLocaleDateString();
 }
 
-function load(sec) {
-  const fns = { config:loadConfig, skip:loadSkip, injection:loadInjection, signals:loadSignals,
-    airports:loadAirports, currencies:loadCurrencies, rates:loadRates, customers:loadCustomers };
-  if (fns[sec]) fns[sec]();
+function saveToken() {
+  localStorage.setItem(TOKEN_KEY, token());
 }
 
-// ── API helpers ──────────────────────────────────────────────
-async function apiFetch(url, opts = {}) {
-  const r = await fetch(API + url, {
-    headers: {'Content-Type':'application/json'}, ...opts
-  });
-  return r.json();
-}
-async function apiGet(url)         { return apiFetch(url); }
-async function apiPost(url, body)  { return apiFetch(url, {method:'POST',  body:JSON.stringify(body)}); }
-async function apiPatch(url, body) { return apiFetch(url, {method:'PATCH', body:JSON.stringify(body)}); }
-async function apiDelete(url)      { return apiFetch(url, {method:'DELETE'}); }
-
-function toast(msg, type='ok') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = `toast ${type} show`;
-  setTimeout(() => el.classList.remove('show'), 3000);
+async function api(path, options = {}) {
+  const adminToken = token();
+  if (!adminToken) {
+    throw new Error("Enter the admin token first.");
+  }
+  const headers = { "Content-Type": "application/json", "X-Admin-Token": adminToken, ...(options.headers || {}) };
+  const response = await fetch(API + path, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || ("Request failed with " + response.status));
+  }
+  return data;
 }
 
-function fmt(v) { return v === null || v === undefined ? '—' : v; }
-function fmtDate(ts) { return ts ? new Date(ts * 1000).toLocaleDateString() : '—'; }
+function switchView(view) {
+  state.view = view;
+  document.querySelectorAll(".nav button").forEach(btn => btn.classList.toggle("active", btn.dataset.view === view));
+  document.querySelectorAll("main section").forEach(section => section.classList.add("hidden"));
+  qs("view-" + view).classList.remove("hidden");
+  qs("pageTitle").textContent = {
+    overview: "Overview",
+    customers: "Customers",
+    airports: "Airports",
+    currencies: "Currencies",
+    rates: "GBP Rates",
+  }[view] || view;
+}
 
-// ── Stats ────────────────────────────────────────────────────
+function renderStats() {
+  const s = state.stats || {};
+  qs("statsGrid").innerHTML = [
+    ["Customers", s.customers || 0],
+    ["Airports", s.ref_airports || 0],
+    ["Currencies", s.ref_currencies || 0],
+    ["GBP Rates", s.ref_gbp_rates || 0],
+  ].map(([label, value]) => `<div class="stat"><div class="k">${escaped(label)}</div><div class="v">${escaped(value)}</div></div>`).join("");
+}
+
 async function loadStats() {
-  const d = await apiGet('/admin/stats');
-  if (!d.data) return;
-  const s = d.data;
-  document.getElementById('statsBar').innerHTML = `
-    <div class="stat-row"><span>Airports</span><span>${s.ref_airports||0}</span></div>
-    <div class="stat-row"><span>Currencies</span><span>${s.ref_currencies||0}</span></div>
-    <div class="stat-row"><span>Skip codes</span><span>${s.guardrail_skip_codes||0}</span></div>
-    <div class="stat-row"><span>Customers</span><span>${s.customers||0}</span></div>
-  `;
+  const data = await api("/admin/stats");
+  state.stats = data;
+  renderStats();
 }
 
-async function reloadCaches() {
-  toast('Reloading caches…', 'ok');
-  await apiPost('/admin/ref/airports', {iata:'__reload__'}).catch(() => {});
-  setTimeout(loadStats, 500);
-  toast('Caches reloaded', 'ok');
+function renderCustomers() {
+  const search = qs("customerSearch").value.trim().toLowerCase();
+  const rows = state.customers.filter(row => {
+    if (!search) return true;
+    return [row.name, row.email, row.member_id, row.id].some(v => String(v || "").toLowerCase().includes(search));
+  });
+  qs("customersTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td>
+        <strong>${escaped(row.name)}</strong><br>
+        <span class="small">${escaped(row.email || "")}</span>
+      </td>
+      <td>${escaped(row.member_id || row.id)}</td>
+      <td><span class="pill">${escaped(row.loyalty_tier || "Blue")}</span></td>
+      <td>${escaped(row.travel_style || "-")}</td>
+      <td><button class="btn-ghost" type="button" onclick="editCustomer('${escaped(row.id)}')">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="5" class="empty">No customers found</td></tr>`;
 }
 
-// ── CONFIG ───────────────────────────────────────────────────
-async function loadConfig() {
-  const d = await apiGet('/admin/guardrail/config');
-  const rows = d.data || [];
-  document.getElementById('configCount').textContent = `${rows.length} settings`;
-  document.getElementById('configBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="5" class="empty">No config found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><span class="code">${r.key}</span></td>
-        <td><strong>${r.value}</strong></td>
-        <td><span class="badge badge-dim">${r.dtype}</span></td>
-        <td style="color:var(--muted)">${r.description||'—'}</td>
-        <td class="actions">
-          <button class="btn btn-ghost btn-sm" onclick='editConfig(${JSON.stringify(r)})'>Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="delConfig('${r.key}')">Del</button>
-        </td>
-      </tr>`).join('');
-}
-function editConfig(r) { openModal('config', r); }
-async function delConfig(key) {
-  if (!confirm(`Delete config "${key}"?`)) return;
-  const d = await apiDelete(`/admin/guardrail/config/${key}`);
-  toast(d.status === 'ok' ? d.message : d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadConfig();
-}
-
-// ── SKIP CODES ───────────────────────────────────────────────
-async function loadSkip() {
-  const d = await apiGet('/admin/guardrail/skip-codes');
-  allSkip = d.data || [];
-  const cats = [...new Set(allSkip.map(r => r.category))].sort();
-  allSkipCats = cats;
-  const sel = document.getElementById('skipCatFilter');
-  sel.innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option>${c}</option>`).join('');
-  filterSkip();
-}
-function filterSkip() {
-  const q = (document.getElementById('skipSearch').value || '').toLowerCase();
-  const cat = document.getElementById('skipCatFilter').value;
-  const rows = allSkip.filter(r =>
-    (!q || r.code.toLowerCase().includes(q) || (r.description||'').toLowerCase().includes(q)) &&
-    (!cat || r.category === cat)
-  );
-  document.getElementById('skipCount').textContent = `${rows.length} codes`;
-  document.getElementById('skipBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="4" class="empty">No codes found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><span class="code">${r.code}</span></td>
-        <td><span class="badge badge-dim">${r.category}</span></td>
-        <td style="color:var(--muted)">${r.description||'—'}</td>
-        <td class="actions">
-          <button class="btn btn-danger btn-sm" onclick="delSkip('${r.code}','${r.category}')">Del</button>
-        </td>
-      </tr>`).join('');
-}
-async function delSkip(code, cat) {
-  if (!confirm(`Delete skip code "${code}" (${cat})?`)) return;
-  const d = await apiDelete(`/admin/guardrail/skip-codes/${code}?category=${cat}`);
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadSkip();
-}
-
-// ── INJECTION PATTERNS ───────────────────────────────────────
-async function loadInjection() {
-  const d = await apiGet('/admin/guardrail/injection-patterns');
-  const rows = d.data || [];
-  document.getElementById('injCount').textContent = `${rows.length} patterns`;
-  document.getElementById('injBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="4" class="empty">No patterns found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><code style="color:var(--amber);font-size:11px">${r.pattern}</code></td>
-        <td style="color:var(--muted)">${r.description||'—'}</td>
-        <td>
-          <label class="toggle">
-            <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleInj(${r.id},this.checked)">
-            <span style="font-size:11px;color:var(--muted);margin-left:4px">${r.enabled ? 'ON' : 'OFF'}</span>
-          </label>
-        </td>
-        <td class="actions">
-          <button class="btn btn-danger btn-sm" onclick="delInj(${r.id})">Del</button>
-        </td>
-      </tr>`).join('');
-}
-async function toggleInj(id, enabled) {
-  const d = await apiPatch(`/admin/guardrail/injection-patterns/${id}`, {enabled: enabled ? 1 : 0});
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-}
-async function delInj(id) {
-  if (!confirm('Delete this injection pattern?')) return;
-  const d = await apiDelete(`/admin/guardrail/injection-patterns/${id}`);
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadInjection();
-}
-
-// ── TRAVEL SIGNALS ───────────────────────────────────────────
-async function loadSignals() {
-  const d = await apiGet('/admin/guardrail/travel-signals');
-  allSig = d.data || [];
-  const cat = document.getElementById('sigCatFilter').value;
-  const rows = cat ? allSig.filter(r => r.category === cat) : allSig;
-  document.getElementById('sigCount').textContent = `${rows.length} signals`;
-  const catColor = {CORE:'badge-teal', MODIFICATION:'badge-amber', DESTINATION:'badge-dim'};
-  document.getElementById('sigBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="3" class="empty">No signals found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><span class="code">${r.signal}</span></td>
-        <td><span class="badge ${catColor[r.category]||'badge-dim'}">${r.category}</span></td>
-        <td class="actions">
-          <button class="btn btn-danger btn-sm" onclick="delSignal('${r.signal}')">Del</button>
-        </td>
-      </tr>`).join('');
-}
-async function delSignal(signal) {
-  if (!confirm(`Delete signal "${signal}"?`)) return;
-  const d = await apiDelete(`/admin/guardrail/travel-signals/${encodeURIComponent(signal)}`);
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadSignals();
-}
-
-// ── AIRPORTS ────────────────────────────────────────────────
-async function loadAirports() {
-  const q = document.getElementById('apSearch').value;
-  const d = await apiGet(`/admin/ref/airports?q=${encodeURIComponent(q)}&limit=100`);
-  const rows = d.data || [];
-  document.getElementById('apCount').textContent = `${rows.length} shown`;
-  document.getElementById('apBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="7" class="empty">No airports found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><span class="code">${r.iata}</span></td>
-        <td>${r.name}</td>
-        <td>${r.city}</td>
-        <td><span class="badge badge-dim">${r.country_code}</span></td>
-        <td style="color:var(--dim)">${r.lat ? r.lat.toFixed(3) : '—'}</td>
-        <td style="color:var(--dim)">${r.lon ? r.lon.toFixed(3) : '—'}</td>
-        <td class="actions">
-          <button class="btn btn-ghost btn-sm" onclick='editAirport(${JSON.stringify(r)})'>Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="delAirport('${r.iata}')">Del</button>
-        </td>
-      </tr>`).join('');
-}
-function editAirport(r) { openModal('airport', r); }
-async function delAirport(iata) {
-  if (!confirm(`Delete airport ${iata}?`)) return;
-  const d = await apiDelete(`/admin/ref/airports/${iata}`);
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadAirports();
-}
-
-// ── CURRENCIES ───────────────────────────────────────────────
-async function loadCurrencies() {
-  const q = document.getElementById('curSearch').value;
-  const d = await apiGet(`/admin/ref/currencies?q=${encodeURIComponent(q)}`);
-  const rows = d.data || [];
-  document.getElementById('curCount').textContent = `${rows.length} currencies`;
-  document.getElementById('curBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="5" class="empty">No currencies found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><span class="code">${r.code}</span></td>
-        <td>${r.name}</td>
-        <td style="color:var(--amber)">${r.symbol||'—'}</td>
-        <td>${r.decimals}</td>
-        <td class="actions">
-          <button class="btn btn-ghost btn-sm" onclick='editCurrency(${JSON.stringify(r)})'>Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="delCurrency('${r.code}')">Del</button>
-        </td>
-      </tr>`).join('');
-}
-function editCurrency(r) { openModal('currency', r); }
-async function delCurrency(code) {
-  if (!confirm(`Delete currency ${code}?`)) return;
-  const d = await apiDelete(`/admin/ref/currencies/${code}`);
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadCurrencies();
-}
-
-// ── GBP RATES ────────────────────────────────────────────────
-async function loadRates() {
-  const d = await apiGet('/admin/ref/gbp-rates');
-  const rows = d.data || [];
-  document.getElementById('rateCount').textContent = `${rows.length} rates`;
-  document.getElementById('rateBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="4" class="empty">No rates found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><span class="code">${r.currency}</span></td>
-        <td><strong>${r.rate}</strong></td>
-        <td style="color:var(--dim)">${fmtDate(r.updated_at)}</td>
-        <td class="actions">
-          <button class="btn btn-ghost btn-sm" onclick='editRate(${JSON.stringify(r)})'>Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="delRate('${r.currency}')">Del</button>
-        </td>
-      </tr>`).join('');
-}
-function editRate(r) { openModal('rate', r); }
-async function delRate(currency) {
-  if (!confirm(`Delete rate ${currency}?`)) return;
-  const d = await apiDelete(`/admin/ref/gbp-rates/${currency}`);
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadRates();
-}
-
-// ── CUSTOMERS ────────────────────────────────────────────────
 async function loadCustomers() {
-  const q = document.getElementById('custSearch').value;
-  const d = await apiGet(`/admin/customers?q=${encodeURIComponent(q)}`);
-  const rows = d.data || [];
-  document.getElementById('custCount').textContent = `${rows.length} customers`;
-  document.getElementById('custBody').innerHTML = rows.length === 0
-    ? '<tr><td colspan="7" class="empty">No customers found</td></tr>'
-    : rows.map(r => `<tr>
-        <td><strong>${r.name}</strong></td>
-        <td style="color:var(--muted)">${r.email}</td>
-        <td><span class="code" style="font-size:11px">${r.member_id||r.id}</span></td>
-        <td><span class="badge tier-badge ${r.tier||'Blue'}">${r.tier||'Blue'}</span></td>
-        <td>${(r.points||0).toLocaleString()}</td>
-        <td style="color:var(--muted)">${r.travel_style||'—'}</td>
-        <td class="actions">
-          <button class="btn btn-ghost btn-sm" onclick='editCustomer(${JSON.stringify(r)})'>Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="delCustomer('${r.id}')">Del</button>
-        </td>
-      </tr>`).join('');
-}
-function editCustomer(r) { openModal('customer', r); }
-async function delCustomer(id) {
-  if (!confirm('Delete this customer? This cannot be undone.')) return;
-  const d = await apiDelete(`/admin/customers/${id}`);
-  toast(d.message, d.status === 'ok' ? 'ok' : 'err');
-  loadCustomers();
+  const data = await api("/admin/customers");
+  state.customers = data.rows || [];
+  renderCustomers();
 }
 
-// ── MODAL ────────────────────────────────────────────────────
-const FORMS = {
-  config: (d={}) => ({
-    title: d.key ? 'Edit Config' : 'Add Config Setting',
-    html: `
-      <div class="field"><label>Key *</label><input id="f_key" value="${d.key||''}" placeholder="CONFIDENCE_THRESHOLD"></div>
-      <div class="field-row">
-        <div class="field"><label>Value *</label><input id="f_value" value="${d.value||''}" placeholder="0.72"></div>
-        <div class="field"><label>Type</label><select id="f_dtype">
-          <option ${d.dtype==='float'?'selected':''}>float</option>
-          <option ${d.dtype==='int'?'selected':''}>int</option>
-          <option ${d.dtype==='str'?'selected':''}>str</option>
-          <option ${d.dtype==='bool'?'selected':''}>bool</option>
-        </select></div>
-      </div>
-      <div class="field"><label>Description</label><input id="f_desc" value="${d.description||''}" placeholder="What this setting controls"></div>
-    `,
-    save: () => ({ key:v('f_key'), value:v('f_value'), dtype:v('f_dtype'), description:v('f_desc') }),
-    api: () => apiPost('/admin/guardrail/config', FORMS.config().save()),
-  }),
-  skip: (d={}) => ({
-    title: 'Add Skip Code',
-    html: `
-      <div class="field-row">
-        <div class="field"><label>Code * (3 letters)</label><input id="f_code" maxlength="5" value="${d.code||''}" placeholder="TAP" style="text-transform:uppercase"></div>
-        <div class="field"><label>Category *</label><select id="f_cat">
-          ${['ENGLISH','TECH','AIRLINE','HOTEL_BRAND','ROOM_TYPE','COUNTRY_ABBREV'].map(c=>`<option ${d.category===c?'selected':''}>${c}</option>`).join('')}
-        </select></div>
-      </div>
-      <div class="field"><label>Description</label><input id="f_desc" value="${d.description||''}" placeholder="What this code represents"></div>
-    `,
-    save: () => ({ code:v('f_code').toUpperCase(), category:v('f_cat'), description:v('f_desc') }),
-  }),
-  injection: (d={}) => ({
-    title: 'Add Injection Pattern',
-    html: `
-      <div class="field"><label>Regex Pattern *</label><input id="f_pat" value="${d.pattern||''}" placeholder="ignore\\s+.*instructions"></div>
-      <div class="field"><label>Description</label><input id="f_desc" value="${d.description||''}" placeholder="What attack this catches"></div>
-    `,
-    save: () => ({ pattern:v('f_pat'), description:v('f_desc'), enabled:1 }),
-  }),
-  signal: (d={}) => ({
-    title: 'Add Travel Signal',
-    html: `
-      <div class="field"><label>Signal / Keyword *</label><input id="f_sig" value="${d.signal||''}" placeholder="flight"></div>
-      <div class="field"><label>Category *</label><select id="f_cat">
-        ${['CORE','MODIFICATION','DESTINATION'].map(c=>`<option ${d.category===c?'selected':''}>${c}</option>`).join('')}
-      </select></div>
-    `,
-    save: () => ({ signal:v('f_sig'), category:v('f_cat') }),
-  }),
-  airport: (d={}) => ({
-    title: d.iata ? `Edit ${d.iata}` : 'Add Airport',
-    html: `
-      <div class="field-row">
-        <div class="field"><label>IATA Code * (3 letters)</label><input id="f_iata" maxlength="3" value="${d.iata||''}" placeholder="DXB" style="text-transform:uppercase"></div>
-        <div class="field"><label>Country Code *</label><input id="f_cc" maxlength="2" value="${d.country_code||''}" placeholder="AE" style="text-transform:uppercase"></div>
-      </div>
-      <div class="field"><label>Airport Name *</label><input id="f_name" value="${d.name||''}" placeholder="Dubai International Airport"></div>
-      <div class="field"><label>City *</label><input id="f_city" value="${d.city||''}" placeholder="Dubai"></div>
-      <div class="field-row">
-        <div class="field"><label>Latitude</label><input id="f_lat" type="number" step="0.0001" value="${d.lat||''}" placeholder="25.2532"></div>
-        <div class="field"><label>Longitude</label><input id="f_lon" type="number" step="0.0001" value="${d.lon||''}" placeholder="55.3657"></div>
-      </div>
-    `,
-    save: () => ({ iata:v('f_iata').toUpperCase(), country_code:v('f_cc').toUpperCase(), name:v('f_name'), city:v('f_city'), lat:parseFloat(v('f_lat'))||null, lon:parseFloat(v('f_lon'))||null }),
-  }),
-  currency: (d={}) => ({
-    title: d.code ? `Edit ${d.code}` : 'Add Currency',
-    html: `
-      <div class="field-row">
-        <div class="field"><label>ISO Code * (3 letters)</label><input id="f_code" maxlength="3" value="${d.code||''}" placeholder="AED" style="text-transform:uppercase"></div>
-        <div class="field"><label>Symbol</label><input id="f_sym" value="${d.symbol||''}" placeholder="د.إ"></div>
-      </div>
-      <div class="field"><label>Currency Name *</label><input id="f_name" value="${d.name||''}" placeholder="UAE Dirham"></div>
-      <div class="field"><label>Decimal Places</label><input id="f_dec" type="number" min="0" max="4" value="${d.decimals!==undefined?d.decimals:2}"></div>
-    `,
-    save: () => ({ code:v('f_code').toUpperCase(), name:v('f_name'), symbol:v('f_sym'), decimals:parseInt(v('f_dec')||2) }),
-  }),
-  rate: (d={}) => ({
-    title: d.currency ? `Edit Rate: ${d.currency}` : 'Add GBP Rate',
-    html: `
-      <div class="field-row">
-        <div class="field"><label>Currency Code *</label><input id="f_cur" maxlength="3" value="${d.currency||''}" placeholder="AED" style="text-transform:uppercase"></div>
-        <div class="field"><label>1 GBP = ? *</label><input id="f_rate" type="number" step="0.0001" value="${d.rate||''}" placeholder="4.672"></div>
-      </div>
-    `,
-    save: () => ({ currency:v('f_cur').toUpperCase(), rate:parseFloat(v('f_rate')) }),
-  }),
-  customer: (d={}) => ({
-    title: d.id ? `Edit: ${d.name}` : 'Add Customer',
-    html: `
-      <div class="field-row">
-        <div class="field"><label>Full Name *</label><input id="f_name" value="${d.name||''}" placeholder="Emma Clarke"></div>
-        <div class="field"><label>Email *</label><input id="f_email" type="email" value="${d.email||''}" placeholder="emma@example.com"></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>Loyalty Tier</label><select id="f_tier">
-          ${['Platinum','Gold','Silver','Blue'].map(t=>`<option ${d.tier===t?'selected':''}>${t}</option>`).join('')}
-        </select></div>
-        <div class="field"><label>Points Balance</label><input id="f_pts" type="number" value="${d.points||0}"></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>Travel Style</label><select id="f_style">
-          ${['leisure','luxury','adventure','family','business','budget'].map(s=>`<option ${d.travel_style===s?'selected':''}>${s}</option>`).join('')}
-        </select></div>
-        <div class="field"><label>Member ID</label><input id="f_mid" value="${d.member_id||d.id||''}" placeholder="VGI-GOLD-5001"></div>
-      </div>
-      <div class="field-row">
-        <div class="field"><label>Adults in Family</label><input id="f_adults" type="number" min="1" value="${d.adults_in_family||2}"></div>
-        <div class="field"><label>Children</label><input id="f_kids" type="number" min="0" value="${d.children_in_family||0}"></div>
-      </div>
-      ${d.id ? `<div class="danger-zone"><div class="danger-title">⚠ DANGER ZONE</div><p style="color:var(--muted);font-size:11px;margin-bottom:10px">This action permanently deletes the customer and all their session data.</p><button class="btn btn-danger" onclick="delCustomer('${d.id}');closeModal()">Delete Customer Permanently</button></div>` : ''}
-    `,
-    save: () => ({
-      name:v('f_name'), email:v('f_email'), tier:v('f_tier'),
-      points:parseInt(v('f_pts')||0), travel_style:v('f_style'),
-      member_id:v('f_mid'), adults_in_family:parseInt(v('f_adults')||2),
-      children_in_family:parseInt(v('f_kids')||0),
-      id: d.id
-    }),
-  }),
+function resetCustomerForm() {
+  state.selectedCustomer = null;
+  qs("customerId").value = "";
+  qs("customerName").value = "";
+  qs("customerEmail").value = "";
+  qs("customerMemberId").value = "";
+  qs("customerTier").value = "Blue";
+  qs("customerPoints").value = "0";
+  qs("customerStyle").value = "leisure";
+  qs("customerBudget").value = "3000";
+  qs("customerNights").value = "7";
+  qs("customerAdults").value = "2";
+  qs("customerChildren").value = "0";
+  qs("customerInterests").value = "";
+  qs("deleteCustomerBtn").classList.add("hidden");
+}
+
+window.editCustomer = function editCustomer(id) {
+  const row = state.customers.find(item => item.id === id);
+  if (!row) return;
+  state.selectedCustomer = row;
+  qs("customerId").value = row.id || "";
+  qs("customerName").value = row.name || "";
+  qs("customerEmail").value = row.email || "";
+  qs("customerMemberId").value = row.member_id || "";
+  qs("customerTier").value = row.loyalty_tier || "Blue";
+  qs("customerPoints").value = row.loyalty_points ?? 0;
+  qs("customerStyle").value = row.travel_style || "leisure";
+  qs("customerBudget").value = row.typical_budget_gbp ?? 3000;
+  qs("customerNights").value = row.typical_nights ?? 7;
+  qs("customerAdults").value = row.adults_in_family ?? 2;
+  qs("customerChildren").value = row.children_in_family ?? 0;
+  qs("customerInterests").value = joinInterests(row.interests);
+  qs("deleteCustomerBtn").classList.remove("hidden");
 };
 
-const SAVE_FNS = {
-  config:    async d => apiPost('/admin/guardrail/config', d),
-  skip:      async d => apiPost('/admin/guardrail/skip-codes', d),
-  injection: async d => apiPost('/admin/guardrail/injection-patterns', d),
-  signal:    async d => apiPost('/admin/guardrail/travel-signals', d),
-  airport:   async d => apiPost('/admin/ref/airports', d),
-  currency:  async d => apiPost('/admin/ref/currencies', d),
-  rate:      async d => apiPost('/admin/ref/gbp-rates', d),
-  customer:  async d => d.id ? apiPatch(`/admin/customers/${d.id}`,d) : apiPost('/admin/customers', d),
+async function saveCustomer() {
+  const payload = {
+    name: qs("customerName").value.trim(),
+    email: qs("customerEmail").value.trim(),
+    member_id: qs("customerMemberId").value.trim(),
+    loyalty_tier: qs("customerTier").value,
+    loyalty_points: Number(qs("customerPoints").value || 0),
+    travel_style: qs("customerStyle").value,
+    typical_budget_gbp: Number(qs("customerBudget").value || 0),
+    typical_nights: Number(qs("customerNights").value || 7),
+    adults_in_family: Number(qs("customerAdults").value || 2),
+    children_in_family: Number(qs("customerChildren").value || 0),
+    interests: parseInterests(qs("customerInterests").value),
+  };
+  const id = qs("customerId").value.trim();
+  if (id) {
+    await api("/admin/customers/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(payload) });
+    setStatus("Customer updated.");
+  } else {
+    await api("/admin/customers", { method: "POST", body: JSON.stringify(payload) });
+    setStatus("Customer created.");
+  }
+  await loadCustomers();
+  await loadStats();
+  resetCustomerForm();
+}
+
+async function deleteCustomer() {
+  const id = qs("customerId").value.trim();
+  if (!id || !confirm("Delete this customer?")) return;
+  await api("/admin/customers/" + encodeURIComponent(id), { method: "DELETE" });
+  setStatus("Customer deleted.");
+  await loadCustomers();
+  await loadStats();
+  resetCustomerForm();
+}
+
+function renderAirports() {
+  const search = qs("airportSearch").value.trim().toLowerCase();
+  const rows = state.airports.filter(row => {
+    if (!search) return true;
+    return [row.iata, row.name, row.city, row.country_code].some(v => String(v || "").toLowerCase().includes(search));
+  });
+  qs("airportsTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td>${escaped(row.iata)}</td>
+      <td>${escaped(row.name)}</td>
+      <td>${escaped(row.city)}</td>
+      <td>${escaped(row.country_code)}</td>
+      <td><button class="btn-ghost" type="button" onclick="editAirport('${escaped(row.iata)}')">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="5" class="empty">No airports found</td></tr>`;
+}
+
+async function loadAirports() {
+  const search = qs("airportSearch").value.trim();
+  const data = await api("/admin/ref/airports?q=" + encodeURIComponent(search) + "&limit=150");
+  state.airports = data.rows || [];
+  renderAirports();
+}
+
+function resetAirportForm() {
+  state.selectedAirport = null;
+  qs("airportIata").value = "";
+  qs("airportCountry").value = "";
+  qs("airportName").value = "";
+  qs("airportCity").value = "";
+  qs("airportLat").value = "";
+  qs("airportLon").value = "";
+  qs("deleteAirportBtn").classList.add("hidden");
+}
+
+window.editAirport = function editAirport(iata) {
+  const row = state.airports.find(item => item.iata === iata);
+  if (!row) return;
+  state.selectedAirport = row;
+  qs("airportIata").value = row.iata || "";
+  qs("airportCountry").value = row.country_code || "";
+  qs("airportName").value = row.name || "";
+  qs("airportCity").value = row.city || "";
+  qs("airportLat").value = row.lat ?? "";
+  qs("airportLon").value = row.lon ?? "";
+  qs("deleteAirportBtn").classList.remove("hidden");
 };
 
-function v(id) { return (document.getElementById(id)||{}).value || ''; }
-
-function openModal(type, data = {}) {
-  modalType = type;
-  modalData = data;
-  const form = FORMS[type](data);
-  document.getElementById('modalTitle').textContent = form.title;
-  document.getElementById('modalBody').innerHTML = form.html;
-  document.getElementById('overlay').classList.add('open');
+async function saveAirport() {
+  const payload = {
+    iata: qs("airportIata").value.trim().toUpperCase(),
+    country_code: qs("airportCountry").value.trim().toUpperCase(),
+    name: qs("airportName").value.trim(),
+    city: qs("airportCity").value.trim(),
+    lat: qs("airportLat").value ? Number(qs("airportLat").value) : null,
+    lon: qs("airportLon").value ? Number(qs("airportLon").value) : null,
+  };
+  await api("/admin/ref/airports", { method: "POST", body: JSON.stringify(payload) });
+  setStatus("Airport saved.");
+  await loadAirports();
+  await loadStats();
+  resetAirportForm();
 }
 
-function closeModal() {
-  document.getElementById('overlay').classList.remove('open');
-  modalType = ''; modalData = {};
+async function deleteAirport() {
+  const iata = qs("airportIata").value.trim().toUpperCase();
+  if (!iata || !confirm("Delete this airport?")) return;
+  await api("/admin/ref/airports/" + encodeURIComponent(iata), { method: "DELETE" });
+  setStatus("Airport deleted.");
+  await loadAirports();
+  await loadStats();
+  resetAirportForm();
 }
 
-async function saveModal() {
-  const form = FORMS[modalType](modalData);
-  const data = form.save ? form.save() : {};
-  if (!data) return;
+function renderCurrencies() {
+  const search = qs("currencySearch").value.trim().toLowerCase();
+  const rows = state.currencies.filter(row => {
+    if (!search) return true;
+    return [row.code, row.name, row.symbol].some(v => String(v || "").toLowerCase().includes(search));
+  });
+  qs("currenciesTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td>${escaped(row.code)}</td>
+      <td>${escaped(row.name)}</td>
+      <td>${escaped(row.symbol)}</td>
+      <td>${escaped(row.decimals ?? 2)}</td>
+      <td><button class="btn-ghost" type="button" onclick="editCurrency('${escaped(row.code)}')">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="5" class="empty">No currencies found</td></tr>`;
+}
+
+async function loadCurrencies() {
+  const search = qs("currencySearch").value.trim();
+  const data = await api("/admin/ref/currencies?q=" + encodeURIComponent(search));
+  state.currencies = data.rows || [];
+  renderCurrencies();
+}
+
+function resetCurrencyForm() {
+  state.selectedCurrency = null;
+  qs("currencyCode").value = "";
+  qs("currencyName").value = "";
+  qs("currencySymbol").value = "";
+  qs("currencyDecimals").value = "2";
+  qs("deleteCurrencyBtn").classList.add("hidden");
+}
+
+window.editCurrency = function editCurrency(code) {
+  const row = state.currencies.find(item => item.code === code);
+  if (!row) return;
+  state.selectedCurrency = row;
+  qs("currencyCode").value = row.code || "";
+  qs("currencyName").value = row.name || "";
+  qs("currencySymbol").value = row.symbol || "";
+  qs("currencyDecimals").value = row.decimals ?? 2;
+  qs("deleteCurrencyBtn").classList.remove("hidden");
+};
+
+async function saveCurrency() {
+  const payload = {
+    code: qs("currencyCode").value.trim().toUpperCase(),
+    name: qs("currencyName").value.trim(),
+    symbol: qs("currencySymbol").value.trim(),
+    decimals: Number(qs("currencyDecimals").value || 2),
+  };
+  await api("/admin/ref/currencies", { method: "POST", body: JSON.stringify(payload) });
+  setStatus("Currency saved.");
+  await loadCurrencies();
+  await loadStats();
+  resetCurrencyForm();
+}
+
+async function deleteCurrency() {
+  const code = qs("currencyCode").value.trim().toUpperCase();
+  if (!code || !confirm("Delete this currency?")) return;
+  await api("/admin/ref/currencies/" + encodeURIComponent(code), { method: "DELETE" });
+  setStatus("Currency deleted.");
+  await loadCurrencies();
+  await loadStats();
+  resetCurrencyForm();
+}
+
+function renderRates() {
+  const rows = state.rates;
+  qs("ratesTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td>${escaped(row.currency)}</td>
+      <td>${escaped(row.rate)}</td>
+      <td>${escaped(fmtDate(row.updated_at))}</td>
+      <td><button class="btn-ghost" type="button" onclick="editRate('${escaped(row.currency)}')">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="4" class="empty">No rates found</td></tr>`;
+}
+
+async function loadRates() {
+  const data = await api("/admin/ref/gbp-rates");
+  state.rates = data.rows || [];
+  renderRates();
+}
+
+function resetRateForm() {
+  state.selectedRate = null;
+  qs("rateCurrency").value = "";
+  qs("rateValue").value = "";
+  qs("deleteRateBtn").classList.add("hidden");
+}
+
+window.editRate = function editRate(currency) {
+  const row = state.rates.find(item => item.currency === currency);
+  if (!row) return;
+  state.selectedRate = row;
+  qs("rateCurrency").value = row.currency || "";
+  qs("rateValue").value = row.rate ?? "";
+  qs("deleteRateBtn").classList.remove("hidden");
+};
+
+async function saveRate() {
+  const payload = {
+    currency: qs("rateCurrency").value.trim().toUpperCase(),
+    rate: Number(qs("rateValue").value || 0),
+  };
+  await api("/admin/ref/gbp-rates", { method: "POST", body: JSON.stringify(payload) });
+  setStatus("GBP rate saved.");
+  await loadRates();
+  await loadStats();
+  resetRateForm();
+}
+
+async function deleteRate() {
+  const currency = qs("rateCurrency").value.trim().toUpperCase();
+  if (!currency || !confirm("Delete this rate?")) return;
+  await api("/admin/ref/gbp-rates/" + encodeURIComponent(currency), { method: "DELETE" });
+  setStatus("GBP rate deleted.");
+  await loadRates();
+  await loadStats();
+  resetRateForm();
+}
+
+async function refreshAll() {
   try {
-    const d = await SAVE_FNS[modalType](data);
-    if (d.status === 'ok') {
-      toast(d.message, 'ok');
-      closeModal();
-      load(currentSection);
-      loadStats();
-    } else {
-      toast(d.message || 'Error saving', 'err');
-    }
-  } catch (e) {
-    toast('Network error: ' + e.message, 'err');
+    setStatus("Loading admin data...");
+    await Promise.all([loadStats(), loadCustomers(), loadAirports(), loadCurrencies(), loadRates()]);
+    setStatus("Admin data loaded.");
+  } catch (error) {
+    setStatus(error.message);
   }
 }
 
-// ── Init ─────────────────────────────────────────────────────
-loadStats();
-loadConfig();
+document.querySelectorAll(".nav button").forEach(btn => {
+  btn.addEventListener("click", () => switchView(btn.dataset.view));
+});
+qs("saveTokenBtn").addEventListener("click", async () => {
+  saveToken();
+  await refreshAll();
+});
+qs("customerSearch").addEventListener("input", renderCustomers);
+qs("airportSearch").addEventListener("input", loadAirports);
+qs("currencySearch").addEventListener("input", loadCurrencies);
+qs("resetCustomerBtn").addEventListener("click", resetCustomerForm);
+qs("saveCustomerBtn").addEventListener("click", saveCustomer);
+qs("deleteCustomerBtn").addEventListener("click", deleteCustomer);
+qs("resetAirportBtn").addEventListener("click", resetAirportForm);
+qs("saveAirportBtn").addEventListener("click", saveAirport);
+qs("deleteAirportBtn").addEventListener("click", deleteAirport);
+qs("resetCurrencyBtn").addEventListener("click", resetCurrencyForm);
+qs("saveCurrencyBtn").addEventListener("click", saveCurrency);
+qs("deleteCurrencyBtn").addEventListener("click", deleteCurrency);
+qs("resetRateBtn").addEventListener("click", resetRateForm);
+qs("saveRateBtn").addEventListener("click", saveRate);
+qs("deleteRateBtn").addEventListener("click", deleteRate);
+
+qs("adminToken").value = localStorage.getItem(TOKEN_KEY) || "voyageai-admin-2026";
+resetCustomerForm();
+resetAirportForm();
+resetCurrencyForm();
+resetRateForm();
+renderStats();
+refreshAll();
 </script>
 </body>
 </html>
