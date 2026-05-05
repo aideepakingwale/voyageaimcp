@@ -97,6 +97,10 @@ class ReasoningEngine:
                 fix_hint    = f"Previous attempt raised: {exc}. Fix and retry."
                 continue
 
+            if result.get("status") == "data_unavailable":
+                memory_store.add_turn(session_id, "assistant", result.get("message", ""))
+                return result
+
             last_result = result
             output_checks = self._guardrail.check_output(
                 result["llm_output"], result["mcp_data"]
@@ -152,6 +156,24 @@ class ReasoningEngine:
                 result = srv.call(params)
                 mcp_data[name] = {**result, "relevance": score}
 
+        unavailable = self._required_data_issues(mcp_data)
+        if unavailable:
+            self._log.warning("LLM skipped because required live data is unavailable", extra={
+                "session_id": session_id,
+                "attempt": attempt,
+                "missing_data": unavailable,
+                "mcp_status": {
+                    name: {
+                        "status": data.get("status", "ok" if not data.get("error") else "error"),
+                        "source": data.get("source") or (data.get("data") or {}).get("source", ""),
+                        "confidence": data.get("confidence", 0),
+                        "error": data.get("error", ""),
+                    }
+                    for name, data in mcp_data.items()
+                },
+            })
+            return self._data_unavailable(session_id, unavailable, mcp_params)
+
         # RAG context
         context    = memory_store.build_context_summary(session_id)
         rag_recall = self._estimate_rag_recall(session_id)
@@ -178,6 +200,21 @@ class ReasoningEngine:
         )
 
         # LLM call via waterfall
+        if not any(
+            p.is_available()
+            for name, p in self._waterfall.providers.items()
+            if name in self._waterfall.waterfall_order and name != "template"
+        ):
+            self._log.warning("LLM skipped because no live LLM provider is configured", extra={
+                "session_id": session_id,
+                "attempt": attempt,
+                "waterfall_order": self._waterfall.waterfall_order,
+            })
+            return self._data_unavailable(session_id, [{
+                "server": "llm",
+                "reason": "No live LLM provider is configured or available.",
+            }], mcp_params)
+
         llm_resp = self._waterfall.complete(SYSTEM_PROMPT, user_prompt)
         if not llm_resp.success:
             raise RuntimeError(f"LLM waterfall exhausted: {llm_resp.error}")
@@ -266,6 +303,113 @@ class ReasoningEngine:
         """Estimate RAG quality from entity count in session."""
         entities = memory_store.retrieve_all_entities(sid)
         return round(min(0.98, 0.65 + 0.05 * len(entities)), 3)
+
+    def _required_data_issues(self, mcp_data: dict) -> list[dict]:
+        required = getattr(Config, "REQUIRED_LIVE_MCP_SERVERS", set())
+        issues = []
+        for name in sorted(required):
+            data = mcp_data.get(name)
+            if not data:
+                issues.append({"server": name, "reason": "Required data source was not called."})
+                continue
+            if data.get("error") or data.get("status") == "data_unavailable":
+                issues.append({
+                    "server": name,
+                    "reason": data.get("error", "Data unavailable."),
+                    "provider_diagnostics": data.get("provider_diagnostics", {}),
+                })
+        return issues
+
+    def _data_unavailable(self, session_id: str, issues: list[dict], params: dict) -> dict:
+        servers = ", ".join(i["server"] for i in issues)
+        reasons = [
+            f"{i['server']}: {i['reason']} {self._diagnostic_summary(i.get('provider_diagnostics', {}))}".strip()
+            for i in issues
+        ]
+        destination = (params.get("flights", {}) or {}).get("destination", "")
+        date = (params.get("flights", {}) or {}).get("date", "")
+        provider_problem = self._provider_problem_summary(issues)
+        if provider_problem:
+            message = (
+                "I cannot create a trustworthy itinerary yet because a required live provider "
+                f"failed for: {servers}. {provider_problem} I will not fill the gaps with "
+                "estimated or mock travel data."
+            )
+        else:
+            message = (
+                "I cannot create a trustworthy itinerary yet because live data is unavailable "
+                f"for: {servers}. I will not fill the gaps with estimated or mock travel data."
+            )
+        suggested_actions = self._suggested_actions_for_issues(issues)
+        return {
+            "session_id": session_id,
+            "status": "data_unavailable",
+            "conversation_state": "needs_input",
+            "message": message,
+            "missing_data": reasons,
+            "missing_data_details": issues,
+            "search_context": {"destination": destination, "date": date},
+            "suggested_actions": suggested_actions,
+            "confidence": {"overall": 0.0, "passed": False},
+        }
+
+    def _provider_problem_summary(self, issues: list[dict]) -> str:
+        parts = []
+        for issue in issues:
+            diag = issue.get("provider_diagnostics", {})
+            summary = self._diagnostic_summary(diag)
+            if summary:
+                parts.append(f"{issue['server']}: {summary.strip('()')}")
+        if not parts:
+            return ""
+        return "Provider diagnostics: " + "; ".join(parts) + "."
+
+    def _suggested_actions_for_issues(self, issues: list[dict]) -> list[str]:
+        actions = []
+        has_http_500 = any("HTTP 500" in self._diagnostic_summary(i.get("provider_diagnostics", {})) for i in issues)
+        has_missing_keys = any("missing" in self._diagnostic_summary(i.get("provider_diagnostics", {})).lower() for i in issues)
+        if has_http_500:
+            actions.extend([
+                "Retry once; Amadeus sandbox HTTP 500 is a provider-side failure.",
+                "Try nearby dates, a nearby airport, or a different destination that the sandbox supports.",
+                "Use production Amadeus credentials or another live flight/hotel provider for this route.",
+            ])
+        if has_missing_keys:
+            actions.append("Set AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET, then restart the server.")
+        actions.append("Ask for a non-bookable checklist or planning brief if live booking data is unavailable.")
+        return actions
+
+    def _diagnostic_summary(self, diagnostics: dict) -> str:
+        if not diagnostics:
+            return ""
+        auth = diagnostics.get("auth") or diagnostics.get("operations", {}).get("auth") or {}
+        if auth.get("status") == "not_configured":
+            return f"({auth.get('reason')})"
+        detail = diagnostics.get("detail") or {}
+        operations = diagnostics.get("operations") or {}
+        if detail.get("status") == "ok" and detail.get("count") == 0:
+            return "(Amadeus returned 0 results)"
+        if detail.get("status") == "http_error":
+            return f"(Amadeus HTTP {detail.get('http_status')}: {detail.get('body', '')[:180]})"
+        if detail.get("status") and detail.get("status") != "ok":
+            return f"(Amadeus {detail.get('status')}: {detail.get('error') or detail.get('reason') or detail.get('body', '')[:180]})"
+        priority = [
+            "hotel_offers",
+            "hotel_list_by_geocode",
+            "hotel_list",
+            *[k for k in operations.keys() if k not in ("auth", "hotel_offers", "hotel_list_by_geocode", "hotel_list")],
+        ]
+        for name in priority:
+            op = operations.get(name)
+            if name == "auth" or not isinstance(op, dict):
+                continue
+            if op.get("status") == "http_error":
+                return f"(Amadeus {name} HTTP {op.get('http_status')}: {op.get('body', '')[:180]})"
+            if op.get("status") and op.get("status") != "ok":
+                return f"(Amadeus {name} {op.get('status')}: {op.get('error') or op.get('body', '')[:180]})"
+            if op.get("status") == "ok" and op.get("count") == 0:
+                return f"(Amadeus {name} returned 0 results)"
+        return ""
 
     def _fix_for_layer(self, layer: str) -> str:
         if "SCHEMA"  in layer: return "Return valid JSON exactly matching the schema."

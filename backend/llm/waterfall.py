@@ -41,7 +41,10 @@ class LLMWaterfall:
             "template": TemplateProvider(),
         }
 
-        self.waterfall_order = Config.LLM_WATERFALL
+        self.waterfall_order = [
+            name for name in Config.LLM_WATERFALL
+            if name != "template" or Config.ALLOW_TEMPLATE_PROVIDER
+        ]
         self.stats = {
             name: {"calls":0,"successes":0,"failures":0,
                    "total_cost":0.0,"total_latency_ms":0.0}
@@ -83,6 +86,14 @@ class LLMWaterfall:
                 continue
 
             t0 = time.time()
+            log.info("LLM request", extra={
+                "provider": pname,
+                "model": getattr(provider, "model", ""),
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "system": system,
+                "prompt": user,
+            })
             try:
                 resp = provider.complete(system, user, max_tokens, temperature)
             except Exception as e:
@@ -109,6 +120,14 @@ class LLMWaterfall:
                     "cost_usd":     resp.cost_usd,
                     "attempt_num":  len(attempts),
                 })
+                log.info("LLM response", extra={
+                    "provider":     pname,
+                    "model":        resp.model,
+                    "success":      True,
+                    "latency_ms":   resp.latency_ms,
+                    "response":     resp.text,
+                    "attempts":     attempts,
+                })
                 return resp
             else:
                 st["failures"] += 1
@@ -117,6 +136,13 @@ class LLMWaterfall:
                     "provider":   pname,
                     "error":      resp.error[:120],
                     "latency_ms": resp.latency_ms,
+                })
+                log.warning("LLM response", extra={
+                    "provider":   pname,
+                    "success":    False,
+                    "latency_ms": resp.latency_ms,
+                    "error":      resp.error,
+                    "attempts":   attempts,
                 })
 
         # Should never reach here — template always works
@@ -145,16 +171,14 @@ class LLMWaterfall:
     # ── Helpers ───────────────────────────────────────────────
 
     def _log_status(self):
-        print("\n╔══════════════════════════════════╗")
-        print("║   VoyageAI  LLM Waterfall        ║")
-        print("╠══════════════════════════════════╣")
+        print("\nVoyageAI LLM Waterfall")
         for name in self.waterfall_order:
-            p     = self.providers[name]
+            p = self.providers[name]
             avail = p.is_available()
-            cost  = "FREE" if p.free else "PAID"
-            icon  = "✓" if avail else "✗"
-            print(f"║  {icon} {name:<12} [{cost:<4}]        ║")
-        print("╚══════════════════════════════════╝\n")
+            cost = "FREE" if p.free else "PAID"
+            icon = "OK" if avail else "NO"
+            print(f"  {icon} {name:<12} [{cost:<4}]")
+        print("")
 
     def _clean_json(self, text: str) -> str:
         """Strip markdown fences, extract JSON object."""

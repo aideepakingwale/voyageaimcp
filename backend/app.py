@@ -1,85 +1,133 @@
-"""VoyageAI Flask Application Factory"""
-from flask      import Flask
+"""VoyageAI Flask application factory."""
+from pathlib import Path
+
+from flask import Flask, send_from_directory
 from flask_cors import CORS
-from config     import Config
+
+from config import Config
 
 
 def create_app(config_class=Config) -> Flask:
-    # ── Logging must be first ──────────────────────────────────
     from core import init_logging, register_request_logging
+
     init_logging()
+    _build_reference_cache()
+    _build_guardrail_cache()
 
-    # Build reference cache from data/reference_data.py (once at startup)
-    from core.reference_cache import ref as _ref
-    _ref.build()
-
-    # Auto-reload reference data if DB has fewer airports than source
-    # (catches the case where new airports were added to reference_data.py
-    #  but load_reference_data.py hasn't been run yet)
-    try:
-        import logging as _logging_mod
-        from data.reference_data import AIRPORTS as _SOURCE_AIRPORTS
-        _db_count  = _ref.stats().get("airports", 0)
-        _src_count = len(_SOURCE_AIRPORTS)
-        if _src_count > _db_count:
-            _logging_mod.getLogger("voyageai.app").warning(
-                "DB has %d airports, source has %d — auto-reloading reference data",
-                _db_count, _src_count
-            )
-            from data.load_reference_data import (
-                get_db as _rdb, create_tables as _rtables, load_all as _rload
-            )
-            from data.reference_data import (
-                CURRENCIES as _C, COUNTRIES as _CO, GBP_FALLBACK_RATES as _G
-            )
-            _conn = _rdb()
-            _rtables(_conn)
-            _rload(_conn, _SOURCE_AIRPORTS, _C, _CO, _G)
-            _conn.close()
-            _ref.build()  # rebuild cache from updated DB
-    except Exception:
-        pass
-
-    # Build guardrail config cache from guardrail_* DB tables (once at startup)
-    from core.guardrail_config_cache import gcfg as _gcfg
-    _gcfg.build()
-
-    app = Flask(__name__)
+    frontend_dir = Path(__file__).resolve().parents[1] / "frontend"
+    app = Flask(
+        __name__,
+        static_folder=str(frontend_dir),
+        static_url_path="",
+    )
     app.config.from_object(config_class)
     CORS(app, origins=config_class.CORS_ORIGINS)
 
-    # HTTP request/response logging middleware
     register_request_logging(app)
-
+    _register_frontend_routes(app, frontend_dir)
     _register_blueprints(app)
     _log_startup()
     return app
 
 
-def _register_blueprints(app):
-    from api.health      import bp as health_bp
-    from api.session     import bp as session_bp
-    from api.chat        import bp as chat_bp
-    from api.customer    import bp as customer_bp
-    from api.loyalty     import bp as loyalty_bp
+def _build_reference_cache() -> None:
+    from core.reference_cache import ref
+
+    ref.build()
+    try:
+        import logging
+        from data.reference_data import AIRPORTS, CURRENCIES, COUNTRIES, GBP_FALLBACK_RATES
+
+        db_count = ref.stats().get("airports", 0)
+        if len(AIRPORTS) <= db_count:
+            return
+
+        logging.getLogger("voyageai.app").warning(
+            "DB has %d airports, source has %d; auto-reloading reference data",
+            db_count,
+            len(AIRPORTS),
+        )
+        from data.load_reference_data import create_tables, get_db, load_all
+
+        conn = get_db()
+        create_tables(conn)
+        load_all(conn, AIRPORTS, CURRENCIES, COUNTRIES, GBP_FALLBACK_RATES)
+        conn.close()
+        ref.build()
+    except Exception:
+        pass
+
+
+def _build_guardrail_cache() -> None:
+    from core.guardrail_config_cache import gcfg
+
+    gcfg.build()
+
+
+def _register_blueprints(app: Flask) -> None:
+    from api.admin import bp as admin_bp
     from api.ancillaries import bp as ancillaries_bp
-    from api.mcp         import bp as mcp_bp
-    from api.auth        import bp as auth_bp
-    from api.locate      import bp as locate_bp
+    from api.auth import bp as auth_bp
+    from api.chat import bp as chat_bp
+    from api.customer import bp as customer_bp
+    from api.health import bp as health_bp
+    from api.locate import bp as locate_bp
+    from api.logs import bp as logs_bp
+    from api.loyalty import bp as loyalty_bp
+    from api.mcp import bp as mcp_bp
+    from api.session import bp as session_bp
 
-    app.register_blueprint(health_bp,      url_prefix="/api")
-    app.register_blueprint(session_bp,     url_prefix="/api")
-    app.register_blueprint(chat_bp,        url_prefix="/api")
-    app.register_blueprint(customer_bp,    url_prefix="/api")
-    app.register_blueprint(loyalty_bp,     url_prefix="/api")
-    app.register_blueprint(ancillaries_bp, url_prefix="/api")
-    app.register_blueprint(mcp_bp,         url_prefix="/api")
-    app.register_blueprint(auth_bp,        url_prefix="/api")
-    app.register_blueprint(locate_bp,      url_prefix="/api")
+    for bp in (
+        health_bp,
+        session_bp,
+        chat_bp,
+        customer_bp,
+        loyalty_bp,
+        ancillaries_bp,
+        mcp_bp,
+        auth_bp,
+        locate_bp,
+        admin_bp,
+        logs_bp,
+    ):
+        app.register_blueprint(bp, url_prefix="/api")
 
 
-def _log_startup():
-    print("\n╔═══════════════════════════════════╗")
-    print("║         VoyageAI  v3.0            ║")
-    print("║   Autonomous Travel Assistant     ║")
-    print("╚═══════════════════════════════════╝")
+def _register_frontend_routes(app: Flask, frontend_dir: Path) -> None:
+    @app.get("/")
+    def frontend_index():
+        return send_from_directory(frontend_dir, "login.html")
+
+    @app.get("/login")
+    def frontend_login():
+        return send_from_directory(frontend_dir, "login.html")
+
+    @app.get("/app")
+    def frontend_app():
+        return send_from_directory(frontend_dir, "index.html")
+
+    @app.get("/logs")
+    def frontend_logs():
+        return send_from_directory(frontend_dir, "logs.html")
+
+    @app.get("/<path:asset_path>")
+    def frontend_assets(asset_path: str):
+        asset_file = frontend_dir / asset_path
+        if asset_file.is_file():
+            return send_from_directory(frontend_dir, asset_path)
+        return send_from_directory(frontend_dir, "login.html")
+
+
+def _log_startup() -> None:
+    print("")
+    print("===================================")
+    print("         VoyageAI v3.0")
+    print("   Autonomous Travel Assistant")
+    print("===================================")
+
+
+app = create_app()
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)

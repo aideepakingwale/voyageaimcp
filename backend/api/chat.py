@@ -10,6 +10,7 @@ The old fragmented pipeline (universal_extractor + intent_extractor +
 conversational_llm + modification_handler) is replaced by ONE clear call.
 """
 import json, copy
+import re
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify
 
@@ -159,14 +160,6 @@ def _clarify(session_id, action):
 
 def _run_plan(session_id, message, action, origin_iata, ctx):
     """Fresh trip planning."""
-    # Check if vague (should be suggestions instead)
-    try:
-        from llm.template_provider import TemplateProvider
-        if TemplateProvider()._is_vague_request(message):
-            return _run_suggest(session_id, message, action, ctx)
-    except Exception:
-        pass
-
     # Build prompt with extracted params so engine has correct values
     prompt = _build_plan_prompt(message, action)
     result = _get_engine().reason(prompt, session_id)
@@ -174,7 +167,19 @@ def _run_plan(session_id, message, action, origin_iata, ctx):
     result["conversation_state"] = "planning"
     result["is_modification"]    = False
 
-    # ── No flight availability — show alternatives, not a broken itinerary ─────
+    if result.get("status") == "data_unavailable":
+        msg = result.get("message", "Live data is unavailable.")
+        memory_store.add_turn(session_id, "assistant", msg)
+        save_turn(session_id, "assistant", msg, "data_unavailable")
+        return jsonify(result)
+
+    if result.get("status") == "human_handoff":
+        response = _cannot_plan_response(session_id, action, result.get("reason", "The reasoning checks did not pass."))
+        memory_store.add_turn(session_id, "assistant", response["message"])
+        save_turn(session_id, "assistant", response["message"], "data_unavailable")
+        return jsonify(response)
+
+    # -- No flight availability - show alternatives, not a broken itinerary -----
     if result.get("status") == "no_availability":
         dest     = action.get("destination") or "your destination"
         guests   = result.get("guests") or action.get("guests", 2)
@@ -192,9 +197,9 @@ def _run_plan(session_id, message, action, origin_iata, ctx):
     if result.get("status") in ("ready","awaiting_confirmation"):
         llm_out = result.get("llm_output") or {}
         if not llm_out.get("intent"):
-            # Build a minimal valid output so UI can render something
-            llm_out = _make_minimal_output(prompt, action)
-            result["llm_output"] = llm_out
+            result.update(_cannot_plan_response(session_id, action, "The reasoning output did not include a valid itinerary."))
+            save_turn(session_id, "assistant", result["message"], "data_unavailable")
+            return jsonify(result)
         ver = save_itinerary_version(
             session_id, llm_out, message, None,
             result.get("confidence",{}).get("overall",0.75),
@@ -206,7 +211,11 @@ def _run_plan(session_id, message, action, origin_iata, ctx):
         save_turn(session_id, "assistant", summary, "plan")
         update_entities(session_id, memory_store.retrieve_all_entities(session_id))
     elif not result.get("llm_output") or not result.get("llm_output",{}).get("intent"):
-        # Final fallback — build itinerary directly from action params
+        result.update(_cannot_plan_response(session_id, action, result.get("reason", "The itinerary could not be built from verified data.")))
+        memory_store.add_turn(session_id, "assistant", result["message"])
+        save_turn(session_id, "assistant", result["message"], "data_unavailable")
+        return jsonify(result)
+        # Final fallback - build itinerary directly from action params
         fallback_out = _make_minimal_output(prompt, action)
         result["status"]              = "awaiting_confirmation"
         result["llm_output"]          = fallback_out
@@ -214,12 +223,22 @@ def _run_plan(session_id, message, action, origin_iata, ctx):
         summary = fallback_out.get("summary","Your itinerary is ready.")
         memory_store.add_turn(session_id, "assistant", summary)
         save_turn(session_id, "assistant", summary, "plan")
+        result.update(_cannot_plan_response(session_id, action, result.get("reason", "The itinerary could not be built from verified data.")))
+        memory_store.add_turn(session_id, "assistant", result["message"])
+        save_turn(session_id, "assistant", result["message"], "data_unavailable")
+        result.pop("llm_output", None)
     return jsonify(result)
 
 
 def _run_modify(session_id, message, action, last_plan, origin_iata, ctx):
     """Apply modification and re-run full pipeline with new params."""
     subtype = action.get("subtype","general")
+
+    # If the user wants to change destination but the new destination is still
+    # generic/vague, do not reuse the previous destination and pretend it changed.
+    # Route to destination suggestions instead so the user can pick a concrete place.
+    if subtype == "destination" and _should_route_destination_change_to_suggestions(message, action, last_plan):
+        return _run_suggest(session_id, message, action, ctx)
 
     # Patch the plan with the action's extracted values
     patched = _patch_plan(last_plan, action)
@@ -251,6 +270,12 @@ def _run_modify(session_id, message, action, last_plan, origin_iata, ctx):
             log.debug("Cache clear error: %s", e)
 
     result = _get_engine().reason(prompt, session_id)
+    if result.get("status") == "data_unavailable":
+        msg = result.get("message", "Live data is unavailable.")
+        memory_store.add_turn(session_id, "assistant", msg)
+        save_turn(session_id, "assistant", msg, "data_unavailable", subtype)
+        return jsonify(result)
+
     result["session_id"]       = session_id
     result["is_modification"]  = True
     result["modification_type"]= subtype
@@ -261,6 +286,12 @@ def _run_modify(session_id, message, action, last_plan, origin_iata, ctx):
     prov    = result.get("llm_provider","template")
 
     if result.get("status") not in ("ready","awaiting_confirmation"):
+        response = _cannot_plan_response(session_id, action, "The modified itinerary could not be rebuilt from verified live data.")
+        response["is_modification"] = True
+        response["modification_type"] = subtype
+        memory_store.add_turn(session_id, "assistant", response["message"])
+        save_turn(session_id, "assistant", response["message"], "data_unavailable", subtype)
+        return jsonify(response)
         result["status"]     = "awaiting_confirmation"
         result["llm_output"] = patched
         llm_out = patched; conf = 0.80; prov = "fallback"
@@ -308,8 +339,21 @@ def _run_suggest(session_id, message, action, ctx):
             return jsonify(result)
     except Exception as e:
         log.debug("Suggest error: %s", e)
-    # Fallback to plan
-    return _run_plan(session_id, message, action, None, ctx)
+    msg = (
+        "I could not generate reliable destination suggestions from a live reasoning provider. "
+        "Tell me a destination you are considering, or provide constraints such as region, month, "
+        "budget, travellers, and preferred experience so I can search verified travel data."
+    )
+    memory_store.add_turn(session_id, "assistant", msg)
+    save_turn(session_id, "assistant", msg, "clarify", "suggest")
+    return jsonify({
+        "session_id": session_id,
+        "status": "clarifying",
+        "conversation_state": "needs_input",
+        "message": msg,
+        "suggestions": [],
+        "confidence": {"overall": 0.0, "passed": False},
+    })
 
 
 # ─── Helpers ──────────────────────────────────────────────────
@@ -382,6 +426,37 @@ def _make_minimal_output(prompt: str, action: dict) -> dict:
     }
 
 
+def _cannot_plan_response(session_id: str, action: dict, reason: str) -> dict:
+    missing = []
+    for key, label in (
+        ("destination_iata", "destination"),
+        ("departure_date", "departure date"),
+        ("guests", "number of travellers"),
+        ("budget_gbp", "budget"),
+    ):
+        if not action.get(key):
+            missing.append(label)
+
+    message = (
+        "I could not create a trustworthy bookable plan from verified live data. "
+        f"{reason} "
+        "I will not invent flights, hotels, prices, weather, or exchange rates. "
+    )
+    if missing:
+        message += "Please provide: " + ", ".join(missing) + "."
+    else:
+        message += "Please try different dates, a nearby destination, or verify the live provider setup."
+
+    return {
+        "session_id": session_id,
+        "status": "data_unavailable",
+        "conversation_state": "needs_input",
+        "message": message,
+        "missing_inputs": missing,
+        "confidence": {"overall": 0.0, "passed": False},
+    }
+
+
 def _store_entities(session_id: str, action: dict):
     """Store all extracted values in session — only valid formats."""
     import re as _re
@@ -409,6 +484,46 @@ def _store_entities(session_id: str, action: dict):
         if validator and not validator(val):
             continue  # skip invalid values (e.g. month name stored as return_date)
         memory_store.store_entity(session_id, entity_key, val, 0.95)
+
+
+def _should_route_destination_change_to_suggestions(message: str, action: dict, last_plan: dict | None) -> bool:
+    """Return True when a destination-change request is still generic and should suggest options first."""
+    text_l = (message or "").lower()
+    requested_iata = (action.get("destination_iata") or "").upper()
+    requested_dest = (action.get("destination") or "").strip().lower()
+
+    current_intent = (last_plan or {}).get("intent", {})
+    current_iata = (current_intent.get("city_code") or "").upper()
+    current_dest = (current_intent.get("destination") or "").strip().lower()
+
+    generic_destination_markers = (
+        " destination", " destinations", " city", " cities", " place", " places",
+        " somewhere", " holiday", " trip", " getaway",
+    )
+    scope_markers = (
+        "india", "indian", "europe", "european", "asia", "asian", "middle east",
+        "africa", "african", "caribbean", "spiritual", "holy", "romantic",
+        "warm", "cold", "beach", "family", "luxury", "entertainment",
+    )
+
+    has_generic_marker = any(marker in f" {text_l} " for marker in generic_destination_markers)
+    has_scope_marker = any(marker in text_l for marker in scope_markers)
+
+    if not requested_iata:
+        return True
+    if current_iata and requested_iata == current_iata:
+        return True
+    if current_dest and requested_dest and requested_dest == current_dest:
+        return True
+    if requested_dest and requested_dest not in text_l and has_generic_marker:
+        return True
+    if requested_dest and requested_dest not in text_l and has_scope_marker:
+        return True
+    if not requested_dest and (has_generic_marker or has_scope_marker):
+        return True
+    if re.search(r"\b(change|switch|different|another)\b", text_l) and (has_generic_marker or has_scope_marker) and requested_dest not in text_l:
+        return True
+    return False
 
 
 def _patch_plan(last: dict, action: dict) -> dict:
@@ -454,13 +569,13 @@ def _build_plan_prompt(message: str, action: dict) -> str:
     parts = []
     dest   = action.get("destination")
     iata   = action.get("destination_iata")
-    guests = action.get("guests", 2)
-    adults = action.get("adults", guests)
-    children = action.get("children", 0)
-    budget = action.get("budget_gbp", 3000)
+    guests = action.get("guests") or 2
+    adults = action.get("adults") or guests
+    children = action.get("children") or max(0, guests - adults)
+    budget = action.get("budget_gbp") or 3000
     dep    = action.get("departure_date","")
-    nights = action.get("nights", 7)
-    stars  = action.get("min_hotel_stars", 4)
+    nights = action.get("nights") or 7
+    stars  = action.get("min_hotel_stars") or 4
     direct = action.get("direct_flight", False)
 
     if dest and iata:
@@ -514,6 +629,7 @@ def _make_summary(subtype: str, action: dict, result: dict) -> str:
     intent = result.get("intent",{})
     dates  = intent.get("dates",{})
     dest   = intent.get("destination","your destination")
+    action_dest = action.get("destination") or ""
     total  = result.get("total_cost_gbp",0)
     dep    = dates.get("departure_date","")
     ret    = dates.get("return_date","")
@@ -521,7 +637,11 @@ def _make_summary(subtype: str, action: dict, result: dict) -> str:
     guests = intent.get("guests",2)
 
     msgs = {
-        "destination": f"Destination updated to {dest}. New itinerary ready. Total: GBP {total:,.0f}",
+        "destination": (
+            f"Destination updated to {dest}. New itinerary ready. Total: GBP {total:,.0f}"
+            if action.get("destination_iata") or action_dest
+            else f"Here are destination options that fit your request. Current total remains GBP {total:,.0f}"
+        ),
         "dates":       f"Dates updated: {dep} to {ret} ({nights} nights). Total: GBP {total:,.0f}",
         "guests":      f"Updated for {guests} guests. Total: GBP {total:,.0f}",
         "hotel":       f"Hotel preference updated. Total: GBP {total:,.0f}",

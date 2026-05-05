@@ -20,12 +20,54 @@ _log = get_logger("auth")
 
 # In-memory active sessions: session_token → customer_id
 _active_logins: dict[str, str] = {}
+_demo_db_checked = False
 
 
 def _get_db():
+    _ensure_demo_db()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _ensure_demo_db():
+    """Create and seed the demo customer database on first local use."""
+    global _demo_db_checked
+    if _demo_db_checked:
+        return
+
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    needs_seed = not os.path.exists(DB_PATH)
+
+    if not needs_seed:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            rows = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+            tables = {row[0] for row in rows}
+            if not {"customers", "loyalty_accounts"}.issubset(tables):
+                needs_seed = True
+            else:
+                customer_count = conn.execute(
+                    "SELECT COUNT(*) FROM customers"
+                ).fetchone()[0]
+                loyalty_count = conn.execute(
+                    "SELECT COUNT(*) FROM loyalty_accounts"
+                ).fetchone()[0]
+                needs_seed = customer_count == 0 or loyalty_count == 0
+        finally:
+            conn.close()
+
+    if needs_seed:
+        import contextlib
+        import io
+        from data.database import init_db
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            init_db()
+
+    _demo_db_checked = True
 
 
 @bp.route("/auth/login", methods=["POST"])
@@ -103,6 +145,7 @@ def login():
             "token":       token,
             "session_id":  sid,
             "customer_id": row["id"],
+            "name":        row["name"],
             "customer_name": row["name"],
             "email":       row["email"],
             "tier":        row["tier"],

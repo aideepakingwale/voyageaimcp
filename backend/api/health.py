@@ -1,6 +1,6 @@
 """Health and waterfall status endpoints."""
 import time
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from config import Config
 
 bp = Blueprint("health", __name__)

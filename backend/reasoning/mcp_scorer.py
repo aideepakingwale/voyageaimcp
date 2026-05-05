@@ -141,7 +141,7 @@ class MCPRelevanceScorer:
         "ancillaries": [],
     }
 
-    ALWAYS_INCLUDE = {"flights", "hotels"}
+    ALWAYS_INCLUDE = {"flights", "hotels", "currency", "weather"}
 
     def score_all(self, text: str, threshold: float = 0.65) -> dict[str, float]:
         text_lower = text.lower()
@@ -394,4 +394,3 @@ def _lookup_origin(candidate: str) -> str | None:
         return candidate.upper()
     from core.geo_location import city_to_iata
     return city_to_iata(candidate)
-

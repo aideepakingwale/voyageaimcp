@@ -3,6 +3,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 from cachetools import TTLCache
+from config import Config
 
 
 class BaseMCP(ABC):
@@ -33,10 +34,14 @@ class BaseMCP(ABC):
 
         try:
             result = self._fetch(params)
-            result["confidence"] = self._score_confidence(result)
-            result["source"]     = result.get("source", self.name)
-            result["cached"]     = False
-            self._cache[key]     = result
+            blocked = self._strict_live_check(result)
+            if blocked:
+                result = blocked
+            else:
+                result["confidence"] = self._score_confidence(result)
+                result["source"]     = result.get("source", self.name)
+                result["cached"]     = False
+                self._cache[key]     = result
         except Exception as e:
             self.latency = round((time.perf_counter() - t0) * 1000, 1)
             self._log.error("MCP fetch failed: %s", e, exc_info=True, extra={
@@ -47,7 +52,11 @@ class BaseMCP(ABC):
         self.latency = round((time.perf_counter() - t0) * 1000, 1)
 
         src  = result.get("data", {})
-        source_label = src.get("source", "?") if isinstance(src, dict) else "?"
+        source_label = (
+            src.get("source")
+            if isinstance(src, dict) and src.get("source")
+            else result.get("source", "?")
+        )
         conf = result.get("confidence", 0)
 
         self._log.info("MCP call", extra={
@@ -59,6 +68,16 @@ class BaseMCP(ABC):
             "params":     {k: v for k, v in params.items()
                            if k not in ("profile","preferences")},
         })
+        self._log.info("MCP response", extra={
+            "server":      self.name,
+            "status":      result.get("status", "ok" if not result.get("error") else "error"),
+            "source":      source_label,
+            "confidence":  round(conf, 2),
+            "error":       result.get("error", ""),
+            "fallback":    bool(result.get("fallback", False)),
+            "cached":      bool(result.get("cached", False)),
+            "response":    result,
+        })
 
         return result
 
@@ -68,6 +87,38 @@ class BaseMCP(ABC):
     def _fallback(self, params: dict, error: str) -> dict:
         return {"error": error, "confidence": 0.0,
                 "source": self.name, "fallback": True, "data": {}}
+
+    def _strict_live_check(self, result: dict) -> dict | None:
+        if not Config.REQUIRE_LIVE_TRAVEL_DATA:
+            return None
+        server_key = self.name.replace("MCP", "").lower()
+        aliases = {
+            "flight": "flights",
+            "hotel": "hotels",
+            "experience": "experiences",
+            "ancillary": "ancillaries",
+        }
+        required_key = aliases.get(server_key, server_key)
+        if required_key not in Config.REQUIRED_LIVE_MCP_SERVERS:
+            return None
+        data = result.get("data", {}) if isinstance(result, dict) else {}
+        source = str(data.get("source") or result.get("source") or "").lower()
+        if any(marker in source for marker in Config.LIVE_SOURCE_MARKERS):
+            return None
+        provider_diagnostics = result.get("provider_diagnostics", {})
+        return {
+            "error": (
+                f"{required_key} requires live provider data, but received "
+                f"{source or 'no source'} data."
+            ),
+            "status": "data_unavailable",
+            "confidence": 0.0,
+            "source": self.name,
+            "fallback": False,
+            "data": {},
+            "required_provider": required_key,
+            "provider_diagnostics": provider_diagnostics,
+        }
 
     def _score_confidence(self, result: dict) -> float:
         if result.get("error"): return 0.0

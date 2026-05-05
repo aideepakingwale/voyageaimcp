@@ -199,6 +199,275 @@ USER: "{message}"
 
 What does the user want? Return JSON action."""
 
+# Override the legacy prompt with a dynamic, LLM-first intent parser.
+_SYSTEM = f"""You are VoyageAI travel assistant. Today: {_TODAY.strftime('%Y-%m-%d')}.
+
+Analyse the FULL conversation and understand exactly what the user wants to do.
+
+Decide dynamically:
+- action="plan" when the user wants a concrete itinerary built
+- action="modify" when they want to change an existing trip
+- action="suggest" when they want destination ideas/options and have not picked one yet
+- action="clarify" when essential information is still missing
+- action="confirm" when they are approving the current plan
+- action="cancel" when they are abandoning the current plan
+
+For modifications, return ONLY the changed fields in `changes`.
+For suggestions, leave destination and destination_iata null unless the user explicitly picked one option.
+Read the full history and current plan before deciding.
+
+Return ONLY valid JSON:
+{{
+  "action": "plan|modify|suggest|clarify|confirm|cancel",
+  "subtype": "destination|dates|guests|hotel|flight|budget|null",
+  "changes": {{
+    "destination": "City name or null",
+    "destination_iata": "IATA or null",
+    "departure_date": "YYYY-MM-DD or null",
+    "nights": number_or_null,
+    "return_date": "YYYY-MM-DD or null",
+    "guests": number_or_null,
+    "adults": number_or_null,
+    "children": number_or_null,
+    "budget_gbp": number_or_null,
+    "min_hotel_stars": number_or_null,
+    "direct_flight": true_false_or_null
+  }},
+  "destination": "City name or null",
+  "destination_iata": "IATA or null",
+  "departure_date": "YYYY-MM-DD or null",
+  "nights": number_or_null,
+  "return_date": "YYYY-MM-DD or null",
+  "guests": number_or_null,
+  "adults": number_or_null,
+  "children": number_or_null,
+  "budget_gbp": number_or_null,
+  "min_hotel_stars": number_or_null,
+  "direct_flight": true_false_or_null,
+  "response": "Short natural reply to user",
+  "reasoning": "Brief: what you understood"
+}}"""
+
+
+def _is_category_suggestion_query(text: str) -> bool:
+    text_l = (text or "").lower()
+    modification_markers = (
+        "change the plan", "change plan", "change dates", "change date",
+        "different dates", "move the trip", "reschedule", "postpone",
+        "bring it forward", "for christmas", "christmas holidays",
+    )
+    if any(marker in text_l for marker in modification_markers):
+        return False
+
+    concrete_plan_markers = (
+        "please build me a complete personalised itinerary",
+        "complete personalised itinerary",
+        "build me a complete itinerary",
+        "build a complete itinerary",
+        "plan a trip to",
+        "book a trip to",
+        "travel to ",
+        "go to ",
+        "visit ",
+        "change destination to",
+        "switch to ",
+        "instead of ",
+        "can we go to ",
+    )
+    if any(marker in text_l for marker in concrete_plan_markers):
+        return False
+
+    if re.search(r"\b[A-Z]{3}\b", text):
+        return False
+
+    suggestion_markers = (
+        "suggest", "recommend", "options", "ideas", "which one", "which destination",
+        "where should", "where can", "where to", "help me choose", "looking for",
+        "show me", "find me", "need ideas",
+    )
+    generic_destination_markers = (
+        "destination", "destinations", "place", "places", "city", "cities",
+        "location", "locations", "holiday", "trip", "vacation", "getaway", "break",
+        "somewhere",
+    )
+
+    has_suggestion_marker = any(term in text_l for term in suggestion_markers)
+    has_generic_destination_marker = any(term in text_l for term in generic_destination_markers)
+    wants_multiple = any(term in text_l for term in ("some", "few", "multiple", "options", "ideas"))
+    has_concrete_trip_params = bool(re.search(
+        r"\d+\s*nights?|\d+\s*weeks?|\d+\s*(people|guests|adults?|children|kids?)|"
+        r"[£$]\s*\d+|"
+        r"\b(january|february|march|april|may|june|july|august|september|october|november|december|christmas|easter|summer|winter)\b|"
+        r"20\d{2}-\d{2}-\d{2}",
+        text_l
+    ))
+    candidate = _extract_destination_candidate(text)
+    should_attempt_destination_resolution = bool(candidate)
+    specific_iata = None
+    if should_attempt_destination_resolution:
+        _, specific_iata = resolve_destination(candidate)
+    has_specific_destination = bool(specific_iata) and not any(
+        region_term in text_l for region_term in (
+            "india", "europe", "asia", "africa", "middle east", "caribbean",
+            "north india", "south india", "east india", "west india",
+        )
+    )
+
+    if has_specific_destination:
+        if has_concrete_trip_params:
+            return False
+        if any(marker in text_l for marker in ("plan", "build", "book", "travel to", "trip to", "holiday in")):
+            return False
+
+    if has_concrete_trip_params and not has_suggestion_marker and not wants_multiple and has_specific_destination:
+        return False
+
+    short_open_ended_query = len(text_l.split()) <= 8 and not has_specific_destination and not has_concrete_trip_params
+    direct_build_marker = any(marker in text_l for marker in (
+        "build", "plan", "book", "itinerary", "package",
+    ))
+    if direct_build_marker and has_specific_destination:
+        return False
+
+    generic_request = not has_specific_destination and (
+        has_suggestion_marker
+        or has_generic_destination_marker
+        or wants_multiple
+        or short_open_ended_query
+    )
+
+    return generic_request
+
+
+def _normalize_category_suggestion(parsed: dict, message: str) -> dict:
+    if not _is_category_suggestion_query(message):
+        return parsed
+
+    text_l = (message or "").lower()
+    if any(marker in text_l for marker in (
+        "change the plan", "change plan", "change dates", "change date",
+        "different dates", "reschedule", "postpone",
+    )):
+        return parsed
+
+    if parsed.get("action") in {"plan", "modify"} or parsed.get("subtype") == "destination":
+        parsed["action"] = "suggest"
+        parsed["subtype"] = "destination"
+        parsed["destination"] = None
+        parsed["destination_iata"] = None
+        parsed["response"] = parsed.get("response") or "I can suggest a few destinations that fit that theme."
+        parsed["reasoning"] = "User is asking for themed destination suggestions, not a single fixed itinerary."
+    return parsed
+
+
+def _hydrate_action(parsed: dict) -> dict:
+    """Normalize LLM output into the flat action shape used by the rest of the backend."""
+    if not isinstance(parsed, dict):
+        return parsed
+
+    changes = parsed.get("changes")
+    if isinstance(changes, dict):
+        for key, value in changes.items():
+            if parsed.get(key) is None and value is not None:
+                parsed[key] = value
+
+    if parsed.get("action") == "modify" and not parsed.get("subtype"):
+        if parsed.get("destination_iata") or parsed.get("destination"):
+            parsed["subtype"] = "destination"
+        elif parsed.get("departure_date") or parsed.get("return_date") or parsed.get("nights"):
+            parsed["subtype"] = "dates"
+        elif parsed.get("guests") is not None or parsed.get("adults") is not None or parsed.get("children") is not None:
+            parsed["subtype"] = "guests"
+        elif parsed.get("budget_gbp") is not None:
+            parsed["subtype"] = "budget"
+        elif parsed.get("min_hotel_stars") is not None:
+            parsed["subtype"] = "hotel"
+        elif parsed.get("direct_flight") is not None:
+            parsed["subtype"] = "flight"
+
+    if parsed.get("action") == "suggest":
+        parsed["destination"] = None
+        parsed["destination_iata"] = None
+
+    return parsed
+
+
+def _has_trip_constraints(text: str) -> bool:
+    text_l = (text or "").lower()
+    return bool(re.search(
+        r"\d+\s*nights?|\d+\s*weeks?|\d+\s*(people|guests|adults?|children|kids?)|"
+        r"[£$]\s*\d+|"
+        r"\b(january|february|march|april|may|june|july|august|september|october|november|december|christmas|easter|summer|winter)\b|"
+        r"20\d{2}-\d{2}-\d{2}|"
+        r"\bdirect\b|\bnonstop\b|\b5\s*star\b|\b4\s*star\b|\bbudget\b",
+        text_l
+    ))
+
+
+def _extract_destination_candidate(text: str) -> str | None:
+    text = (text or "").strip()
+    if not text:
+        return None
+
+    stop_candidates = {
+        "can we look", "can we look for", "can we", "i want to change",
+        "i want to change to", "change the plan", "change plan",
+        "show me", "find me", "find some", "look for", "suggest",
+        "recommend", "help me choose",
+    }
+
+    patterns = [
+        r"\b(?:trip to|travel to|go to|visit|holiday in|destination in|fly to)\s+([A-Za-z][A-Za-z\s'-]{1,40}?)(?:\s+for\b|\s+in\b|\s+with\b|\s+during\b|\s+from\b|$)",
+        r"^([A-Z][A-Za-z\s'-]{1,40}?)(?:\s+for\b|\s+in\b|\s+with\b|\s+during\b|\s+from\b|$)",
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, text)
+        if m:
+            candidate = (m.group(1) or "").strip(" ,.-")
+            candidate_l = candidate.lower()
+            if candidate and len(candidate.split()) <= 4 and candidate_l not in stop_candidates:
+                return candidate
+    return None
+
+
+def _resolve_explicit_destination(parsed: dict, message: str, plan_text: str) -> dict:
+    """Resolve explicit destination text into an IATA code before downstream routing uses stale session state."""
+    if not isinstance(parsed, dict):
+        return parsed
+
+    if parsed.get("action") == "suggest":
+        return parsed
+
+    current_iata = None
+    m = re.search(r'\(([A-Z]{3})\)', plan_text)
+    if m:
+        current_iata = m.group(1)
+
+    destination = (parsed.get("destination") or "").strip()
+    destination_iata = (parsed.get("destination_iata") or "").strip()
+    explicit_iata_match = re.search(r'\b([A-Z]{3})\b', message or "")
+
+    if explicit_iata_match and not destination_iata:
+        parsed["destination_iata"] = explicit_iata_match.group(1)
+        destination_iata = parsed["destination_iata"]
+
+    if destination and not destination_iata:
+        exclude_iata = current_iata if parsed.get("action") == "modify" else None
+        city, iata = resolve_destination(destination, exclude_iata=exclude_iata)
+        if iata:
+            parsed["destination"] = city or destination
+            parsed["destination_iata"] = iata
+            return parsed
+
+    if parsed.get("action") == "plan" and not parsed.get("destination_iata"):
+        candidate = _extract_destination_candidate(message)
+        if candidate:
+            city, iata = resolve_destination(candidate)
+            if iata:
+                parsed["destination"] = city or candidate
+                parsed["destination_iata"] = iata
+    return parsed
+
 
 def understand(
     message: str,
@@ -322,6 +591,9 @@ def _try_llm(plan_text: str, hist_text: str, message: str, session_id: str) -> d
                 if resp.success and resp.text:
                     parsed = _parse_json(resp.text)
                     if parsed:
+                        parsed = _hydrate_action(parsed)
+                        parsed = _resolve_explicit_destination(parsed, message, plan_text)
+                        parsed = _normalize_category_suggestion(parsed, message)
                         # Post-process: ensure destination is not the current plan's destination
                         parsed = _validate_destination_change(parsed, plan_text, message)
                         parsed["_source"] = pname
@@ -344,6 +616,11 @@ def _validate_destination_change(parsed: dict, plan_text: str, message: str) -> 
     Ensure destination changes never return the current plan's destination.
     Also resolve regional terms to specific cities.
     """
+    if parsed.get("action") == "suggest" or _is_category_suggestion_query(message):
+        parsed["destination"] = None
+        parsed["destination_iata"] = None
+        return parsed
+
     if parsed.get("subtype") != "destination":
         return parsed
 
@@ -496,6 +773,30 @@ def _deterministic(message: str, history: list, plan: dict | None, session_id: s
         return result
 
     # ── EXTRACT PLAN PARAMS ───────────────────────────────────
+    if _is_category_suggestion_query(message):
+        return {
+            **result,
+            "action": "suggest",
+            "subtype": "destination",
+            "destination": None,
+            "destination_iata": None,
+            "response": "I can suggest a few destinations that fit what you are asking for.",
+            "reasoning": "User is asking for destination ideas rather than a fully specified itinerary.",
+        }
+
+    iata_check = None
+    candidate = _extract_destination_candidate(message)
+    if candidate:
+        _, iata_check = resolve_destination(candidate)
+    if not has_plan and not iata_check and _has_trip_constraints(message):
+        return {
+            **result,
+            "action": "clarify",
+            "subtype": "destination",
+            "response": "I have the trip details, but I still need a destination. Tell me the place you want, or ask for suggestions.",
+            "reasoning": "User gave trip constraints but did not choose a specific destination.",
+        }
+
     # For fresh plan requests: extract destination, dates, guests, budget
     city, iata = resolve_destination(message)
     date_info  = {}

@@ -1,10 +1,25 @@
 """
-VoyageAI SQLite Mock Database
-Creates realistic mock data for:
-- Customer profiles & travel history
-- Loyalty program tiers & points
-- Ancillary preferences
-Run once: python data/database.py
+VoyageAI SQLite Mock Customer Database
+========================================
+SOURCE OF TRUTH: This file IS the customer database.
+All customer, loyalty, travel history and ancillary data is mock/demo data
+seeded here. There is no external CRM or customer API.
+
+Design principle:
+  - Add/edit customers here → run `python data/database.py` → data reloads
+  - Admin panel (/admin.html) allows live CRUD on customers table
+  - No attempt is made to sync with an external system
+
+Seed data covers 5 realistic UK traveller personas:
+  1. Sarah Mitchell  — family traveller, Gold loyalty
+  2. James Okafor   — frequent business traveller, Platinum
+  3. Priya Sharma   — leisure couple, Silver (close to Gold)
+  4. Tom Bradley    — budget adventure solo, Blue
+  5. Emma Clarke    — luxury couple, Gold (honeymoon specialist)
+
+Run:
+  python data/database.py          # create + seed
+  python data/database.py --reset  # drop all tables and re-seed
 """
 import sqlite3, os, json
 from datetime import datetime, timedelta
@@ -35,7 +50,14 @@ def init_db():
         children_in_family INTEGER DEFAULT 0,
         travel_style TEXT DEFAULT 'leisure',  -- leisure|business|adventure|family
         preferences  TEXT,  -- JSON
-        created_at   TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at   TEXT,
+        member_id    TEXT UNIQUE,
+        loyalty_tier TEXT DEFAULT 'Blue',
+        loyalty_points INTEGER DEFAULT 0,
+        typical_budget_gbp REAL DEFAULT 3000,
+        typical_nights INTEGER DEFAULT 7,
+        interests    TEXT
     )""")
 
     # ── TRAVEL HISTORY ────────────────────────────────────
@@ -437,17 +459,28 @@ def _seed_customers(c):
     for cust in customers:
         # Insert customer
         prefs = cust["preferences"]
+        loy_info     = cust.get("loyalty", {})
+        prefs_parsed = json.loads(prefs)
+        interests    = json.dumps(prefs_parsed.get("interests", []))
+        typical_budget = 3500 if loy_info.get("tier") in ("Gold","Platinum") else                          2000 if loy_info.get("tier") == "Silver" else 1500
+        typical_nights = 10 if loy_info.get("tier") in ("Gold","Platinum") else 7
+
         c.execute("""INSERT OR REPLACE INTO customers
             (id, name, email, phone, passport_country, date_of_birth,
-             adults_in_family, children_in_family, travel_style, preferences)
-            VALUES (?,?,?,?,?,?,?,?,?,?)""",
+             adults_in_family, children_in_family, travel_style, preferences,
+             member_id, loyalty_tier, loyalty_points,
+             typical_budget_gbp, typical_nights, interests)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (cust["id"], cust["name"], cust["email"], cust["phone"],
              cust["passport_country"], cust["date_of_birth"],
              cust["adults_in_family"], cust["children_in_family"],
-             cust["travel_style"], prefs))
+             cust["travel_style"], prefs,
+             loy_info.get("member_id"), loy_info.get("tier","Blue"),
+             loy_info.get("points_balance",0),
+             typical_budget, typical_nights, interests))
 
         # Insert loyalty
-        loy = cust["loyalty"]
+        loy = loy_info
         c.execute("""INSERT OR REPLACE INTO loyalty_accounts
             (customer_id, member_id, tier, points_balance, points_ytd,
              total_nights_ytd, total_flights_ytd, member_since, tier_expiry)
@@ -467,4 +500,17 @@ def _seed_customers(c):
 
 
 if __name__ == "__main__":
+    import sys
+    if "--reset" in sys.argv:
+        import os
+        if os.path.exists(DB_PATH):
+            os.remove(DB_PATH)
+            print(f"  Removed {DB_PATH}")
     init_db()
+    print()
+    print("  Mock data summary:")
+    conn = get_db()
+    for table in ["customers","loyalty_accounts","travel_history","ancillaries","loyalty_tiers"]:
+        n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        print(f"    {table:<25} {n} rows")
+    conn.close()

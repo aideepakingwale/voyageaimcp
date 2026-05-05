@@ -31,7 +31,10 @@ import { buildRecommendationPrompt,
 function getAuth() {
   try {
     const raw = sessionStorage.getItem('voyage_auth');
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const auth = JSON.parse(raw);
+    if (!auth.name && auth.customer_name) auth.name = auth.customer_name;
+    return auth;
   } catch { return null; }
 }
 
@@ -385,11 +388,8 @@ async function _handleResponse(data) {
       // Format the message as a structured card
       const htmlMsg = msg
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/
-
-/g, '<br><br>')
-        .replace(/
-• /g, '<br>• ');
+        .replace(/\n\s*\n/g, '<br><br>')
+        .replace(/\n• /g, '<br>• ');
       appendAI(
         `<div style="padding:14px 18px;border:1px solid rgba(245,166,35,.3);
            border-radius:10px;background:rgba(245,166,35,.05);">
@@ -558,11 +558,16 @@ function _renderSuggestions(text, suggestions) {
     itemsHtml = suggestions.map((s, i) => {
       const dest     = s.destination || '';
       const country  = s.country     || '';
+      const iata     = s.iata        || '';
       const tagline  = s.tagline     || s.why_this_fits || '';
       const budget   = s.budget_pp_gbp;
       const duration = s.duration_suggestion || '7 nights';
       const best     = s.best_time   || '';
-      const highlights = (s.highlights || []).slice(0, 3);
+      const highlights = Array.isArray(s.highlights)
+        ? s.highlights.slice(0, 3)
+        : (typeof s.highlights === 'string'
+            ? s.highlights.split(/,|;|\n/).map(h => h.trim()).filter(Boolean).slice(0, 3)
+            : []);
 
       let budgetStr = '';
       if (budget) {
@@ -581,7 +586,7 @@ function _renderSuggestions(text, suggestions) {
         .filter(Boolean).join(' &nbsp;·&nbsp; ');
 
       return `<div class="sug-item" onclick="window._pickSuggestion(this)"
-                   data-destination="${dest}" data-number="${i+1}">
+                   data-destination="${dest}" data-iata="${iata}" data-number="${i+1}">
         <div class="sug-num">${i + 1}</div>
         <div class="sug-content">
           <div class="sug-name"><strong>${dest}</strong>${country ? `, <span class="sug-country">${country}</span>` : ''}</div>
@@ -613,7 +618,7 @@ function _renderSuggestions(text, suggestions) {
     if (items.length > 0) {
       itemsHtml = items.map(item =>
         `<div class="sug-item" onclick="window._pickSuggestion(this)"
-              data-destination="${item.name}" data-number="${item.num}">
+              data-destination="${item.name}" data-iata="${item.iata || ''}" data-number="${item.num}">
           <div class="sug-num">${item.num}</div>
           <div class="sug-content">
             <div class="sug-name"><strong>${item.name}</strong></div>
@@ -660,6 +665,9 @@ window._pickSuggestion = function(el) {
   const dest = el.dataset.destination
              || el.querySelector('.sug-name strong')?.textContent?.trim()
              || el.textContent.trim();
+  const iata = el.dataset.iata
+             || el.querySelector('.sug-meta')?.textContent?.match(/\b[A-Z]{3}\b/)?.[0]
+             || '';
   if (!dest) return;
 
   // Build a complete, context-rich prompt so no further questions are needed
@@ -690,7 +698,7 @@ window._pickSuggestion = function(el) {
 
   // Build complete prompt — no clarifying questions needed
   const parts = [
-    `Plan a trip to ${dest} for ${guestStr}.`,
+    `Plan a trip to ${dest}${iata ? ` (${iata})` : ''} for ${guestStr}.`,
     budget  ? `My typical trip budget is around £${budget.toLocaleString()}.` : '',
     nights  ? `My typical trip is around ${nights} nights.` : '',
     style   ? `I am a ${style} traveller.` : '',
@@ -714,4 +722,3 @@ window._pickSuggestion = function(el) {
     if (sendBtn) sendBtn.click();
   }, 80);
 };
-

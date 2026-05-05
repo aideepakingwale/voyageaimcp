@@ -295,6 +295,17 @@ def _parse_suggestions(text: str) -> list | None:
     except json.JSONDecodeError:
         pass
 
+    # Attempt 1b: multiple top-level objects separated by commas, but not wrapped in []
+    try:
+        object_matches = re.findall(r'\{[\s\S]*?"destination"[\s\S]*?\}', text)
+        if len(object_matches) >= 2:
+            data = [json.loads(fragment) for fragment in object_matches]
+            valid = _validate_suggestions(data)
+            if valid:
+                return valid
+    except Exception:
+        pass
+
     # ── Attempt 2: strip trailing garbage and retry ───────────
     try:
         # The LLM often returns ["Dubai"], "extra text..."
@@ -356,6 +367,16 @@ def _validate_suggestions(data: list) -> list:
         item.setdefault("duration_suggestion","7 nights")
         item.setdefault("country",           "")
         # Sanitise budget — LLM may return string like "2500" or "£2,500"
+        if not isinstance(item.get("highlights"), list):
+            raw_highlights = item.get("highlights")
+            if isinstance(raw_highlights, str):
+                item["highlights"] = [
+                    part.strip(" .")
+                    for part in re.split(r",|;|\u2022|\n", raw_highlights)
+                    if part.strip(" .")
+                ]
+            else:
+                item["highlights"] = []
         raw_budget = item.get("budget_pp_gbp", 2500)
         try:
             item["budget_pp_gbp"] = int(str(raw_budget).replace(",","").replace("£","").replace("$","").strip())

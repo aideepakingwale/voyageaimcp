@@ -176,11 +176,11 @@ def init_logging() -> None:
                 "anthropic._base_client", "groq._base_client", "openai"):
         logging.getLogger(lib).setLevel(logging.ERROR)
 
-    print(f"\n  ✓ Logs → {LOG_DIR}")
+    print(f"\n  Logs -> {LOG_DIR}")
     mode = "DEBUG (full LLM prompts in debug.log)" if _DEBUG_MODE else "INFO"
     print(f"    Level: {mode}")
-    print(f"    Files: app · llm · mcp · guardrails · auth · errors"
-          + (" · debug" if _DEBUG_MODE else ""))
+    print(f"    Files: app, llm, mcp, guardrails, auth, errors"
+          + (", debug" if _DEBUG_MODE else ""))
 
 
 def get_logger(name: str) -> logging.Logger:

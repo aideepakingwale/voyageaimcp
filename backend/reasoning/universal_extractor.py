@@ -37,7 +37,10 @@ Rules:
 - Convert relative dates to exact YYYY-MM-DD: "next Christmas" -> "{_TODAY.year if _TODAY.month < 12 else _TODAY.year+1}-12-25"
 - "in October" -> "{_TODAY.year if _TODAY.month < 10 else _TODAY.year+1}-10-01"  
 - "for X weeks" -> nights: X*7
-- Extract ANY destination mentioned, even partial: "India" -> "DEL", "holy places India" -> "DEL" (nearest hub)
+- Extract ANY destination mentioned, even partial: "India" -> "DEL"
+- If the user is asking for a themed set of destination ideas like "holy places in India" or
+  "romantic cities in Europe", do not force a single destination_iata. Leave destination fields null
+  unless one specific destination is clearly chosen.
 - If destination is a region, use the main airport: "India" -> "DEL", "Scottish Highlands" -> "INV"
 - budget: extract any number preceded by £ $, or followed by pounds/budget/gbp
 - Return null for any field not mentioned

@@ -24,7 +24,7 @@ def register_request_logging(app: Flask) -> None:
         if _is_static(request.path):
             return
 
-        log.info("→ %s %s", request.method, request.path, extra={
+        log.info("REQ %s %s", request.method, request.path, extra={
             "method": request.method,
             "path":   request.path,
             "ip":     request.remote_addr,
@@ -38,7 +38,7 @@ def register_request_logging(app: Flask) -> None:
 
         ms  = round((time.perf_counter() - g.get("request_start", 0)) * 1000)
         lvl = "warning" if response.status_code >= 400 else "info"
-        getattr(log, lvl)("← %s %s %s", response.status_code,
+        getattr(log, lvl)("RES %s %s %s", response.status_code,
                            request.method, request.path, extra={
             "status":     response.status_code,
             "elapsed_ms": ms,
@@ -60,3 +60,4 @@ def register_request_logging(app: Flask) -> None:
 def _is_static(path: str) -> bool:
     return any(path.endswith(ext)
                for ext in (".js", ".css", ".html", ".ico", ".png", ".map", ".woff"))
+

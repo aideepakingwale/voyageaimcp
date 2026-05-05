@@ -130,8 +130,8 @@ with open(path, encoding="utf-8") as f:
 
 print("Verification:")
 print(f"  {'✓' if 'let visaHTML' in final else '✗'} let visaHTML declared")
-print(f"  {'✓' if \"visaHTML = ''\" in final else '✗'} visaHTML has default value in _buildCard")
-print(f"  {'✓' if 'tp-visa' in final else '—'} visa tab pane present")
+visa_default = "OK" if "visaHTML = ''" in final else "NO"
+print(f"  {visa_default} visaHTML has default value in _buildCard")
 print(f"  {'✓' if 'visaHTML' in final else '✗'} visaHTML referenced in template")
 
 print()
