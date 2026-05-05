@@ -329,6 +329,7 @@ class ReasoningEngine:
         destination = (params.get("flights", {}) or {}).get("destination", "")
         date = (params.get("flights", {}) or {}).get("date", "")
         provider_problem = self._provider_problem_summary(issues)
+        alternatives = self._build_alternative_suggestions(session_id, issues, params)
         if provider_problem:
             message = (
                 "I cannot create a trustworthy itinerary yet because a required live provider "
@@ -350,8 +351,86 @@ class ReasoningEngine:
             "missing_data_details": issues,
             "search_context": {"destination": destination, "date": date},
             "suggested_actions": suggested_actions,
+            "suggestions": alternatives.get("suggestions", []),
+            "summary": alternatives.get("summary", ""),
             "confidence": {"overall": 0.0, "passed": False},
         }
+
+    def _build_alternative_suggestions(self, session_id: str, issues: list[dict], params: dict) -> dict:
+        """Offer alternatives when live data fails, without inventing bookable inventory."""
+        failing_servers = {i.get("server", "") for i in issues}
+        if not failing_servers.intersection({"flights", "hotels"}):
+            return {}
+
+        try:
+            from reasoning.llm_destination_suggester import suggest_destinations_with_llm
+        except Exception:
+            return {}
+
+        entities = memory_store.retrieve_all_entities(session_id)
+        history = memory_store.get_history(session_id, max_turns=8)
+        last_itinerary = memory_store.get_last_itinerary(session_id)
+
+        destination = (
+            entities.get("destination")
+            or ((last_itinerary or {}).get("intent", {}) or {}).get("destination")
+            or (params.get("flights", {}) or {}).get("destination")
+            or "this destination"
+        )
+        departure_date = (
+            entities.get("departure_date")
+            or ((last_itinerary or {}).get("intent", {}).get("dates", {}) or {}).get("departure_date")
+            or (params.get("flights", {}) or {}).get("date")
+            or ""
+        )
+        month_hint = ""
+        if departure_date and len(str(departure_date)) >= 7:
+            month_hint = str(departure_date)[5:7]
+
+        interests = entities.get("interests") or []
+        if isinstance(interests, str):
+            interests = [x.strip() for x in interests.split(",") if x.strip()]
+        elif not isinstance(interests, list):
+            interests = []
+
+        profile = {
+            "name": entities.get("customer_name") or "Guest",
+            "travel_style": entities.get("travel_style") or "leisure",
+            "interests": interests or ["travel"],
+            "loyalty_tier": entities.get("loyalty_tier") or "Blue",
+            "typical_budget_gbp": int(entities.get("budget_gbp") or 3000),
+            "typical_nights": int(entities.get("nights") or 7),
+            "visited_destinations": [],
+        }
+
+        history_text = history[-1]["content"] if history else ""
+        alt_query = (
+            f"{history_text}\n\n"
+            f"Live booking data is unavailable for {destination}."
+            f"{' Travel month: ' + month_hint + '.' if month_hint else ''} "
+            "Suggest 3 alternative destinations that fit the same intent and are sensible next options. "
+            "Prefer nearby dates or nearby/similar destinations over a completely different trip."
+        ).strip()
+
+        try:
+            result = suggest_destinations_with_llm(
+                alt_query,
+                customer_profile=profile,
+                conversation_history=history,
+                last_itinerary=last_itinerary,
+            )
+        except Exception:
+            return {}
+
+        suggestions = result.get("suggestions") or []
+        if not suggestions:
+            return {}
+
+        summary = (
+            "Live availability is missing for the requested trip, so here are a few nearby-fit alternatives "
+            "you can switch to instead."
+        )
+        return {"suggestions": suggestions[:3], "summary": summary}
 
     def _provider_problem_summary(self, issues: list[dict]) -> str:
         parts = []
@@ -366,33 +445,47 @@ class ReasoningEngine:
 
     def _suggested_actions_for_issues(self, issues: list[dict]) -> list[str]:
         actions = []
-        has_http_500 = any("HTTP 500" in self._diagnostic_summary(i.get("provider_diagnostics", {})) for i in issues)
-        has_missing_keys = any("missing" in self._diagnostic_summary(i.get("provider_diagnostics", {})).lower() for i in issues)
+        summaries = [self._diagnostic_summary(i.get("provider_diagnostics", {})) for i in issues]
+        has_http_500 = any("HTTP 500" in summary for summary in summaries)
+        has_missing_keys = any("missing" in summary.lower() for summary in summaries)
+        has_zero_results = any("returned 0 results" in summary.lower() for summary in summaries)
+        provider_names = sorted({
+            ((i.get("provider_diagnostics", {}) or {}).get("provider") or "").strip()
+            for i in issues
+            if (i.get("provider_diagnostics", {}) or {}).get("provider")
+        })
+        provider_label = ", ".join(provider_names) if provider_names else "the live provider"
         if has_http_500:
             actions.extend([
-                "Retry once; Amadeus sandbox HTTP 500 is a provider-side failure.",
-                "Try nearby dates, a nearby airport, or a different destination that the sandbox supports.",
-                "Use production Amadeus credentials or another live flight/hotel provider for this route.",
+                f"Retry once; {provider_label} returned an HTTP 500 provider-side failure.",
+                "Try nearby dates, a nearby airport, or a different destination/provider-supported route.",
+                f"Use production credentials or another live flight/hotel provider if {provider_label} keeps failing.",
             ])
         if has_missing_keys:
-            actions.append("Set AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET, then restart the server.")
+            actions.append("Set the required provider API keys in .env, then restart the server.")
+        if has_zero_results:
+            actions.extend([
+                "Try nearby dates, a shorter stay, or a nearby airport/hub for the same trip style.",
+                "Pick one of the alternative destinations below and I can rebuild the itinerary around it.",
+            ])
         actions.append("Ask for a non-bookable checklist or planning brief if live booking data is unavailable.")
         return actions
 
     def _diagnostic_summary(self, diagnostics: dict) -> str:
         if not diagnostics:
             return ""
+        provider = diagnostics.get("provider") or "provider"
         auth = diagnostics.get("auth") or diagnostics.get("operations", {}).get("auth") or {}
         if auth.get("status") == "not_configured":
             return f"({auth.get('reason')})"
         detail = diagnostics.get("detail") or {}
         operations = diagnostics.get("operations") or {}
         if detail.get("status") == "ok" and detail.get("count") == 0:
-            return "(Amadeus returned 0 results)"
+            return f"({provider} returned 0 results)"
         if detail.get("status") == "http_error":
-            return f"(Amadeus HTTP {detail.get('http_status')}: {detail.get('body', '')[:180]})"
+            return f"({provider} HTTP {detail.get('http_status')}: {detail.get('body', '')[:180]})"
         if detail.get("status") and detail.get("status") != "ok":
-            return f"(Amadeus {detail.get('status')}: {detail.get('error') or detail.get('reason') or detail.get('body', '')[:180]})"
+            return f"({provider} {detail.get('status')}: {detail.get('error') or detail.get('reason') or detail.get('body', '')[:180]})"
         priority = [
             "hotel_offers",
             "hotel_list_by_geocode",
@@ -404,11 +497,11 @@ class ReasoningEngine:
             if name == "auth" or not isinstance(op, dict):
                 continue
             if op.get("status") == "http_error":
-                return f"(Amadeus {name} HTTP {op.get('http_status')}: {op.get('body', '')[:180]})"
+                return f"({provider} {name} HTTP {op.get('http_status')}: {op.get('body', '')[:180]})"
             if op.get("status") and op.get("status") != "ok":
-                return f"(Amadeus {name} {op.get('status')}: {op.get('error') or op.get('body', '')[:180]})"
+                return f"({provider} {name} {op.get('status')}: {op.get('error') or op.get('body', '')[:180]})"
             if op.get("status") == "ok" and op.get("count") == 0:
-                return f"(Amadeus {name} returned 0 results)"
+                return f"({provider} {name} returned 0 results)"
         return ""
 
     def _fix_for_layer(self, layer: str) -> str:

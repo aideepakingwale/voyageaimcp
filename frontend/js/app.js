@@ -389,7 +389,7 @@ async function _handleResponse(data) {
       const htmlMsg = msg
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/\n\s*\n/g, '<br><br>')
-        .replace(/\n• /g, '<br>• ');
+        .replace(/\n\u2022 /g, '<br>\u2022 ');
       appendAI(
         `<div style="padding:14px 18px;border:1px solid rgba(245,166,35,.3);
            border-radius:10px;background:rgba(245,166,35,.05);">
@@ -409,6 +409,16 @@ async function _handleResponse(data) {
     appendAI(`🤝 <strong style="color:var(--amber)">Our specialists will assist you.</strong><br>
       <span style="color:var(--muted)">The AI couldn't complete this with enough confidence. 
       Try: <em>"Seychelles 2 adults 1 week October £4000"</em></span>`);
+    return;
+  }
+
+  if (status === 'data_unavailable') {
+    const msg = data.message || 'Live booking data is unavailable for this request.';
+    if (data.suggestions?.length) {
+      appendAI(_renderSuggestions(msg, data.suggestions));
+    } else {
+      appendAI(msg);
+    }
     return;
   }
 
@@ -722,3 +732,4 @@ window._pickSuggestion = function(el) {
     if (sendBtn) sendBtn.click();
   }, 80);
 };
+
