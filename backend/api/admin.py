@@ -35,6 +35,33 @@ def _reload():
     except Exception:
         pass
 
+
+@bp.route("/admin/guardrail/bootstrap", methods=["POST"])
+@require_admin
+def guardrail_bootstrap():
+    from data.load_guardrail_config import (
+        create_tables,
+        get_db,
+        load_config,
+        load_injection_patterns,
+        load_schema_rules,
+        load_skip_codes,
+        load_travel_signals,
+    )
+
+    conn = get_db()
+    create_tables(conn)
+    counts = {
+        "guardrail_config": load_config(conn),
+        "guardrail_skip_codes": load_skip_codes(conn),
+        "guardrail_injection_patterns": load_injection_patterns(conn),
+        "guardrail_travel_signals": load_travel_signals(conn),
+        "guardrail_schema_rules": load_schema_rules(conn),
+    }
+    conn.close()
+    _reload()
+    return jsonify({"ok": True, "counts": counts})
+
 @bp.route("/admin/stats", methods=["GET"])
 @require_admin
 def admin_stats():

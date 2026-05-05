@@ -101,6 +101,10 @@ code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#99f6e4}
         <div class="title" id="pageTitle">Overview</div>
         <div class="status" id="pageStatus">Checking admin access...</div>
       </div>
+      <div class="row-actions">
+        <button class="btn-ghost" id="refreshAllBtn" type="button">Refresh</button>
+        <button class="btn-primary" id="seedGuardrailsBtn" type="button">Seed Guardrails</button>
+      </div>
     </div>
 
     <section id="view-overview">
@@ -799,8 +803,24 @@ async function refreshAll() {
   }
 }
 
+async function seedGuardrails() {
+  try {
+    setStatus("Seeding guardrail tables...");
+    const data = await api("/admin/guardrail/bootstrap", { method: "POST", body: JSON.stringify({}) });
+    await refreshAll();
+    setStatus(
+      "Guardrails seeded: " +
+      Object.entries(data.counts || {}).map(([k, v]) => `${k}=${v}`).join(", ")
+    );
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
 document.querySelectorAll(".nav button").forEach(btn => btn.addEventListener("click", () => switchView(btn.dataset.view)));
 qs("saveTokenBtn").addEventListener("click", async () => { saveToken(); await refreshAll(); });
+qs("refreshAllBtn").addEventListener("click", refreshAll);
+qs("seedGuardrailsBtn").addEventListener("click", seedGuardrails);
 qs("configSearch").addEventListener("input", renderConfig);
 qs("skipSearch").addEventListener("input", renderSkip);
 qs("skipFilter").addEventListener("change", renderSkip);

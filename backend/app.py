@@ -62,6 +62,35 @@ def _build_guardrail_cache() -> None:
     from core.guardrail_config_cache import gcfg
 
     gcfg.build()
+    if gcfg.stats().get("source") == "database":
+        return
+
+    try:
+        import logging
+        from data.load_guardrail_config import (
+            create_tables,
+            get_db,
+            load_config,
+            load_injection_patterns,
+            load_schema_rules,
+            load_skip_codes,
+            load_travel_signals,
+        )
+
+        logging.getLogger("voyageai.app").warning(
+            "Guardrail tables missing or empty; auto-bootstrapping guardrail config"
+        )
+        conn = get_db()
+        create_tables(conn)
+        load_config(conn)
+        load_skip_codes(conn)
+        load_injection_patterns(conn)
+        load_travel_signals(conn)
+        load_schema_rules(conn)
+        conn.close()
+        gcfg.reload()
+    except Exception:
+        pass
 
 
 def _register_blueprints(app: Flask) -> None:
