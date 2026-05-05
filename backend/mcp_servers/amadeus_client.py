@@ -149,6 +149,7 @@ class AmadeusClient:
         }
 
     def flight_offers(self, origin: str, destination: str, date: str,
+                      return_date: str | None = None,
                       adults: int = 1, direct_only: bool = False,
                       currency: str | None = "GBP", max_results: int = 8) -> list[dict]:
         """Search flight offers. Returns list of parsed offer dicts."""
@@ -159,6 +160,7 @@ class AmadeusClient:
             return []
         req = {
             "origin": origin, "destination": destination, "date": date,
+            "return_date": return_date,
             "adults": adults, "direct_only": direct_only,
         }
         params = {
@@ -169,6 +171,8 @@ class AmadeusClient:
             "nonStop":                 str(direct_only).lower(),
             "max":                     max_results,
         }
+        if return_date:
+            params["returnDate"] = return_date
         if currency:
             params["currencyCode"] = currency
         url = f"{AMADEUS_BASE}/v2/shopping/flight-offers"

@@ -125,20 +125,21 @@ class FlightMCP(BaseMCP):
         origin = params.get("origin", "LHR").upper()
         dest = params.get("destination", "LIS").upper()
         date = params.get("date") or (datetime.now() + timedelta(days=60)).strftime("%Y-%m-%d")
+        return_date = params.get("return_date") or ""
         adults = int(params.get("adults", 2))
         direct = params.get("direct_only", False)
         curr = params.get("currency", "GBP")
         provider = (Config.FLIGHT_DATA_PROVIDER or "duffel").lower()
 
         if provider == "duffel":
-            return self._fetch_duffel(origin, dest, date, adults, direct, curr)
-        return self._fetch_amadeus(origin, dest, date, adults, direct, curr)
+            return self._fetch_duffel(origin, dest, date, return_date, adults, direct, curr)
+        return self._fetch_amadeus(origin, dest, date, return_date, adults, direct, curr)
 
-    def _fetch_duffel(self, origin: str, dest: str, date: str,
+    def _fetch_duffel(self, origin: str, dest: str, date: str, return_date: str,
                       adults: int, direct: bool, currency: str) -> dict:
         if duffel.configured:
             try:
-                raw = duffel.offer_request(origin, dest, date, adults, direct_only=direct)
+                raw = duffel.offer_request(origin, dest, date, return_date, adults, direct_only=direct)
                 if raw:
                     flights = [f for f in (_parse_duffel_offer(o, adults, currency) for o in raw[:12]) if f]
                     if flights:
@@ -149,6 +150,7 @@ class FlightMCP(BaseMCP):
                                 "origin": origin,
                                 "destination": dest,
                                 "date": date,
+                                "return_date": return_date,
                                 "source": "duffel_api_live",
                             },
                             "count": len(flights),
@@ -166,6 +168,7 @@ class FlightMCP(BaseMCP):
                     "origin": origin,
                     "destination": dest,
                     "date": date,
+                    "return_date": return_date,
                     "adults": adults,
                     "direct_only": direct,
                 })
@@ -177,7 +180,7 @@ class FlightMCP(BaseMCP):
             duffel._set_diag("offer_request", status="auth_unavailable",
                              auth=duffel.last_diagnostic.get("auth", {}))
 
-        fallback = _realistic_flights(origin, dest, date, adults, direct)
+        fallback = _realistic_flights(origin, dest, date, adults, direct, return_date)
         fallback["provider_diagnostics"] = {
             "provider": "duffel",
             "configured": duffel.configured,
@@ -187,7 +190,7 @@ class FlightMCP(BaseMCP):
         }
         return fallback
 
-    def _fetch_amadeus(self, origin: str, dest: str, date: str,
+    def _fetch_amadeus(self, origin: str, dest: str, date: str, return_date: str,
                        adults: int, direct: bool, currency: str) -> dict:
         if amadeus.configured:
             attempts = [
@@ -205,6 +208,7 @@ class FlightMCP(BaseMCP):
                 try:
                     raw = amadeus.flight_offers(
                         origin, dest, date, adults,
+                        return_date=return_date,
                         direct_only=attempt["direct_only"],
                         currency=attempt["currency"],
                         max_results=attempt["max_results"],
@@ -216,12 +220,13 @@ class FlightMCP(BaseMCP):
                             return {
                                 "data": {
                                     "flights": flights,
-                                    "origin": origin,
-                                    "destination": dest,
-                                    "date": date,
-                                    "source": "amadeus_live",
-                                    "amadeus_attempt": attempt["label"],
-                                },
+                                "origin": origin,
+                                "destination": dest,
+                                "date": date,
+                                "return_date": return_date,
+                                "source": "amadeus_live",
+                                "amadeus_attempt": attempt["label"],
+                            },
                                 "count": len(flights),
                             }
                         self._log.warning("Amadeus returned flight offers but none were usable", extra={
@@ -250,7 +255,7 @@ class FlightMCP(BaseMCP):
             amadeus._set_diag("flight_offers", status="auth_unavailable",
                               auth=amadeus.last_diagnostic.get("auth", {}))
 
-        fallback = _realistic_flights(origin, dest, date, adults, direct)
+        fallback = _realistic_flights(origin, dest, date, adults, direct, return_date)
         fallback["provider_diagnostics"] = {
             "provider": "amadeus",
             "configured": amadeus.configured,
@@ -269,31 +274,41 @@ class FlightMCP(BaseMCP):
 
 def _parse_amadeus_offer(offer, adults):
     try:
-        itinerary = offer["itineraries"][0]
-        segments = itinerary["segments"]
-        first, last = segments[0], segments[-1]
-        carrier = first["carrierCode"]
+        itineraries = offer.get("itineraries", []) or []
+        if not itineraries:
+            return None
+        outbound = _parse_amadeus_itinerary(itineraries[0])
+        if not outbound:
+            return None
+        inbound = _parse_amadeus_itinerary(itineraries[1]) if len(itineraries) > 1 else None
+        first = itineraries[0]["segments"][0]
         price = float(offer["price"]["grandTotal"])
-        duration = _dur(itinerary.get("duration", ""))
         seats = offer.get("numberOfBookableSeats", adults + 4)
         if int(seats) < adults:
             return None
         cabin = offer["travelerPricings"][0]["fareDetailsBySegment"][0].get("cabin", "ECONOMY")
+        total_stops = outbound["stops"] + (inbound["stops"] if inbound else 0)
         return {
-            "airline": AIRLINE_NAMES.get(carrier, carrier),
-            "flight_number": carrier + first["number"],
-            "origin": first["departure"]["iataCode"],
-            "destination": last["arrival"]["iataCode"],
-            "departure": first["departure"]["at"],
-            "arrival": last["arrival"]["at"],
-            "duration": duration,
-            "stops": len(segments) - 1,
+            "airline": outbound["primary_airline"],
+            "flight_number": outbound["primary_flight_number"],
+            "origin": outbound["origin"],
+            "destination": outbound["destination"],
+            "departure": outbound["departure"],
+            "arrival": inbound["arrival"] if inbound else outbound["arrival"],
+            "duration": _combine_durations(outbound["duration"], inbound["duration"] if inbound else ""),
+            "stops": total_stops,
             "cabin": cabin,
             "price_gbp": round(price, 2),
             "price_per_adult": round(price / max(adults, 1), 2),
             "seats_available": int(seats),
             "bookable": True,
             "source": "amadeus_live",
+            "route_type": "round_trip" if inbound else "one_way",
+            "is_roundtrip": bool(inbound),
+            "outbound": outbound,
+            "inbound": inbound,
+            "segments": outbound["segments"],
+            "layovers": outbound["layovers"],
         }
     except Exception:
         return None
@@ -304,11 +319,12 @@ def _parse_duffel_offer(offer, adults, currency):
         slices = offer.get("slices", []) or []
         if not slices:
             return None
-        first_slice = slices[0]
-        segments = first_slice.get("segments", []) or []
-        if not segments:
+        slice_details = [_parse_duffel_slice(s) for s in slices]
+        if not slice_details or not slice_details[0]:
             return None
-        first, last = segments[0], segments[-1]
+        outbound = slice_details[0]
+        inbound = slice_details[1] if len(slice_details) > 1 else None
+        first = (slices[0].get("segments") or [])[0]
         owner = offer.get("owner", {}) or {}
         marketing_code = (
             ((first.get("marketing_carrier") or {}).get("iata_code"))
@@ -334,24 +350,118 @@ def _parse_duffel_offer(offer, adults, currency):
         total_amount = float(offer.get("total_amount") or 0)
         total_currency = (offer.get("total_currency") or currency or "GBP").upper()
         total_gbp = _convert_to_gbp(total_amount, total_currency)
+        total_stops = outbound["stops"] + (inbound["stops"] if inbound else 0)
         return {
             "airline": airline_name,
             "flight_number": f"{marketing_code}{marketing_number}".strip() or marketing_code or "DUFFEL",
-            "origin": _segment_iata(first, "origin"),
-            "destination": _segment_iata(last, "destination"),
-            "departure": first.get("departing_at"),
-            "arrival": last.get("arriving_at"),
-            "duration": _dur(first_slice.get("duration", "")),
-            "stops": max(0, len(segments) - 1),
+            "origin": outbound["origin"],
+            "destination": outbound["destination"],
+            "departure": outbound["departure"],
+            "arrival": inbound["arrival"] if inbound else outbound["arrival"],
+            "duration": _combine_durations(outbound["duration"], inbound["duration"] if inbound else ""),
+            "stops": total_stops,
             "cabin": str(offer.get("cabin_class") or "economy").upper(),
             "price_gbp": round(total_gbp, 2),
             "price_per_adult": round(total_gbp / max(adults, 1), 2),
             "seats_available": adults,
             "bookable": True,
             "source": "duffel_api_live",
+            "route_type": "round_trip" if inbound else "one_way",
+            "is_roundtrip": bool(inbound),
+            "outbound": outbound,
+            "inbound": inbound,
+            "segments": outbound["segments"],
+            "layovers": outbound["layovers"],
         }
     except Exception:
         return None
+
+
+def _parse_amadeus_itinerary(itinerary: dict) -> dict | None:
+    segments = itinerary.get("segments", []) or []
+    if not segments:
+        return None
+    first, last = segments[0], segments[-1]
+    segs = []
+    layovers = []
+    for idx, seg in enumerate(segments):
+        carrier = seg.get("carrierCode", "")
+        segs.append({
+            "airline": AIRLINE_NAMES.get(carrier, carrier),
+            "carrier_code": carrier,
+            "flight_number": f"{carrier}{seg.get('number', '')}".strip(),
+            "origin": seg.get("departure", {}).get("iataCode", ""),
+            "destination": seg.get("arrival", {}).get("iataCode", ""),
+            "departure": seg.get("departure", {}).get("at"),
+            "arrival": seg.get("arrival", {}).get("at"),
+            "duration": _dur(seg.get("duration", "")),
+        })
+        if idx:
+            prev = segments[idx - 1]
+            layovers.append(_layover(
+                prev.get("arrival", {}).get("at"),
+                seg.get("departure", {}).get("at"),
+                seg.get("departure", {}).get("iataCode", ""),
+            ))
+    return {
+        "origin": first.get("departure", {}).get("iataCode", ""),
+        "destination": last.get("arrival", {}).get("iataCode", ""),
+        "departure": first.get("departure", {}).get("at"),
+        "arrival": last.get("arrival", {}).get("at"),
+        "duration": _dur(itinerary.get("duration", "")),
+        "stops": max(0, len(segments) - 1),
+        "is_direct": len(segments) == 1,
+        "segments": segs,
+        "layovers": [x for x in layovers if x],
+        "primary_airline": segs[0]["airline"] if segs else "",
+        "primary_flight_number": segs[0]["flight_number"] if segs else "",
+    }
+
+
+def _parse_duffel_slice(flight_slice: dict) -> dict | None:
+    segments = flight_slice.get("segments", []) or []
+    if not segments:
+        return None
+    first, last = segments[0], segments[-1]
+    segs = []
+    layovers = []
+    for idx, seg in enumerate(segments):
+        carrier = ((seg.get("marketing_carrier") or {}).get("iata_code")
+                   or (seg.get("operating_carrier") or {}).get("iata_code")
+                   or "")
+        airline = ((seg.get("operating_carrier") or {}).get("name")
+                   or (seg.get("marketing_carrier") or {}).get("name")
+                   or AIRLINE_NAMES.get(carrier, carrier))
+        segs.append({
+            "airline": airline,
+            "carrier_code": carrier,
+            "flight_number": f"{carrier}{seg.get('marketing_carrier_flight_number') or seg.get('operating_carrier_flight_number') or ''}".strip(),
+            "origin": _segment_iata(seg, "origin"),
+            "destination": _segment_iata(seg, "destination"),
+            "departure": seg.get("departing_at"),
+            "arrival": seg.get("arriving_at"),
+            "duration": _dur(seg.get("duration", "")),
+        })
+        if idx:
+            prev = segments[idx - 1]
+            layovers.append(_layover(
+                prev.get("arriving_at"),
+                seg.get("departing_at"),
+                _segment_iata(seg, "origin"),
+            ))
+    return {
+        "origin": _segment_iata(first, "origin"),
+        "destination": _segment_iata(last, "destination"),
+        "departure": first.get("departing_at"),
+        "arrival": last.get("arriving_at"),
+        "duration": _dur(flight_slice.get("duration", "")),
+        "stops": max(0, len(segments) - 1),
+        "is_direct": len(segments) == 1,
+        "segments": segs,
+        "layovers": [x for x in layovers if x],
+        "primary_airline": segs[0]["airline"] if segs else "",
+        "primary_flight_number": segs[0]["flight_number"] if segs else "",
+    }
 
 
 def _convert_to_gbp(amount: float, currency: str) -> float:
@@ -371,7 +481,7 @@ def _segment_iata(segment: dict, key: str) -> str:
     return node.get("iata_code") or ((node.get("city") or {}).get("iata_code")) or ""
 
 
-def _realistic_flights(origin, dest, date, adults, direct):
+def _realistic_flights(origin, dest, date, adults, direct, return_date=""):
     base = ROUTE_BASE_PRICES.get((origin, dest)) or ROUTE_BASE_PRICES.get((origin[:3], dest)) or 300
     route_type = _route_type(dest)
     schedules = SCHEDULES.get(route_type, SCHEDULES["LONG"])
@@ -396,18 +506,67 @@ def _realistic_flights(origin, dest, date, adults, direct):
         seed = abs(hash(f"{origin}{dest}{dep_time}{code}"))
         variation = 1 + (seed % 22 - 11) / 100
         per_person = round(base * multiplier * weekend_multiplier * advance_multiplier * variation, 2)
+        return_day = return_date or (
+            datetime.strptime(date, "%Y-%m-%d") + timedelta(days=7)
+        ).strftime("%Y-%m-%d")
         total = round(per_person * adults, 2)
         dep_hour, dep_min = map(int, dep_time.split(":"))
         arrival_minutes = dep_hour * 60 + dep_min + int(hours * 60)
+        ret_dep_minutes = max(360, dep_hour * 60 - 55)
+        ret_arrival_minutes = ret_dep_minutes + int(hours * 60)
         flight_number = f"{code}{100 + seed % 900}"
-        flights.append({
-            "airline": AIRLINE_NAMES.get(code, code),
-            "flight_number": flight_number,
+        outbound = {
             "origin": origin,
             "destination": dest,
             "departure": f"{date}T{dep_hour:02d}:{dep_min:02d}:00",
             "arrival": f"{date}T{arrival_minutes // 60:02d}:{arrival_minutes % 60:02d}:00",
             "duration": f"{int(hours)}h {int((hours % 1) * 60):02d}m",
+            "stops": 0,
+            "is_direct": True,
+            "segments": [{
+                "airline": AIRLINE_NAMES.get(code, code),
+                "carrier_code": code,
+                "flight_number": flight_number,
+                "origin": origin,
+                "destination": dest,
+                "departure": f"{date}T{dep_hour:02d}:{dep_min:02d}:00",
+                "arrival": f"{date}T{arrival_minutes // 60:02d}:{arrival_minutes % 60:02d}:00",
+                "duration": f"{int(hours)}h {int((hours % 1) * 60):02d}m",
+            }],
+            "layovers": [],
+            "primary_airline": AIRLINE_NAMES.get(code, code),
+            "primary_flight_number": flight_number,
+        }
+        inbound = {
+            "origin": dest,
+            "destination": origin,
+            "departure": f"{return_day}T{ret_dep_minutes // 60:02d}:{ret_dep_minutes % 60:02d}:00",
+            "arrival": f"{return_day}T{ret_arrival_minutes // 60:02d}:{ret_arrival_minutes % 60:02d}:00",
+            "duration": f"{int(hours)}h {int((hours % 1) * 60):02d}m",
+            "stops": 0,
+            "is_direct": True,
+            "segments": [{
+                "airline": AIRLINE_NAMES.get(code, code),
+                "carrier_code": code,
+                "flight_number": f"{code}{600 + seed % 300}",
+                "origin": dest,
+                "destination": origin,
+                "departure": f"{return_day}T{ret_dep_minutes // 60:02d}:{ret_dep_minutes % 60:02d}:00",
+                "arrival": f"{return_day}T{ret_arrival_minutes // 60:02d}:{ret_arrival_minutes % 60:02d}:00",
+                "duration": f"{int(hours)}h {int((hours % 1) * 60):02d}m",
+            }],
+            "layovers": [],
+            "primary_airline": AIRLINE_NAMES.get(code, code),
+            "primary_flight_number": f"{code}{600 + seed % 300}",
+        }
+        flights.append({
+            "airline": AIRLINE_NAMES.get(code, code),
+            "flight_number": flight_number,
+            "origin": origin,
+            "destination": dest,
+            "departure": outbound["departure"],
+            "arrival": inbound["arrival"] if return_date else outbound["arrival"],
+            "duration": _combine_durations(outbound["duration"], inbound["duration"] if return_date else ""),
             "stops": 0,
             "cabin": "ECONOMY",
             "price_gbp": total,
@@ -415,6 +574,12 @@ def _realistic_flights(origin, dest, date, adults, direct):
             "seats_available": max(adults + 2, random.randint(4, 9)),
             "bookable": True,
             "source": "estimated",
+            "route_type": "round_trip" if return_date else "one_way",
+            "is_roundtrip": bool(return_date),
+            "outbound": outbound,
+            "inbound": inbound if return_date else None,
+            "segments": outbound["segments"],
+            "layovers": [],
         })
     flights.sort(key=lambda x: x["price_gbp"])
     return {
@@ -423,6 +588,7 @@ def _realistic_flights(origin, dest, date, adults, direct):
             "origin": origin,
             "destination": dest,
             "date": date,
+            "return_date": return_date,
             "source": "estimated",
         },
         "count": len(flights),
@@ -436,3 +602,25 @@ def _dur(iso_value):
         f"{hours.group(1)}h" if hours else "",
         f"{minutes.group(1)}m" if minutes else "",
     ])) or (iso_value or "")
+
+
+def _layover(prev_arrival: str | None, next_departure: str | None, airport: str) -> dict | None:
+    if not prev_arrival or not next_departure:
+        return None
+    try:
+        prev_dt = datetime.fromisoformat(prev_arrival.replace("Z", "+00:00"))
+        next_dt = datetime.fromisoformat(next_departure.replace("Z", "+00:00"))
+        minutes = max(0, int((next_dt - prev_dt).total_seconds() // 60))
+    except Exception:
+        return None
+    return {
+        "airport": airport,
+        "minutes": minutes,
+        "duration": f"{minutes // 60}h {minutes % 60:02d}m" if minutes >= 60 else f"{minutes}m",
+    }
+
+
+def _combine_durations(first: str, second: str) -> str:
+    if first and second:
+        return f"{first} + {second}"
+    return first or second

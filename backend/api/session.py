@@ -57,7 +57,13 @@ def confirm():
     if action == "reject":
         return jsonify({"status": "rejected", "message": "Booking cancelled by user."})
 
-    memory_store.confirm_element(sid, element, data)
+    if element == "package":
+        package_payload = data if isinstance(data, dict) else {}
+        for key in ("flight", "hotel", "payment"):
+            memory_store.confirm_element(sid, key, package_payload.get(key, {}))
+        memory_store.confirm_element(sid, "package", package_payload)
+    else:
+        memory_store.confirm_element(sid, element, data)
     confirmed = memory_store.get_confirmed(sid)
     all_done  = all(k in confirmed for k in ("flight", "hotel", "payment"))
 
@@ -67,5 +73,7 @@ def confirm():
         "confirmed": confirmed,
         "next_step": "payment" if ("flight" in confirmed and "hotel" in confirmed
                                    and "payment" not in confirmed) else None,
-        "message":   "🎉 Booking complete!" if all_done else f"✓ {element.title()} confirmed.",
+        "message":   "Package confirmed in one go." if element == "package" else (
+            "Booking complete!" if all_done else f"{element.title()} confirmed."
+        ),
     })

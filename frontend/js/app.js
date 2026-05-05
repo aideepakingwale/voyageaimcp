@@ -480,16 +480,41 @@ async function _handleResponse(data) {
 // ── Booking flow ──────────────────────────────────────────────
 
 async function confirmEl(element) {
-  appendAI(`<span style="color:var(--teal)">✓ <strong>${_cap(element)}</strong> confirmed…</span>`);
+  appendAI(`<span style="color:var(--teal)">Confirming <strong>${_cap(element)}</strong>...</span>`);
   try {
-    const r = await api.confirmElement(state.getSessionId(), element, {});
+    const payload = {
+      ancillaries: Array.from(state.getSelectedAncillaries().entries()).map(([id, value]) => ({ id, ...value })),
+      ancillary_total_gbp: getAncillaryTotal(),
+    };
+    const r = await api.confirmElement(state.getSessionId(), element, payload);
     if (r.status === 'confirmed') {
-      appendAI(`🎉 <strong style="color:var(--teal)">Booking Complete!</strong><br>Reference: VGI-${state.getSessionId().toUpperCase()}`);
+      appendAI(`<strong style="color:var(--teal)">Booking Complete!</strong><br>Reference: VGI-${state.getSessionId().toUpperCase()}`);
       stopTimer();
     } else {
-      appendAI(`✓ ${_cap(element)} confirmed.${r.next_step ? ` Confirm <strong>${r.next_step}</strong> next.` : ''}`);
+      appendAI(`??? ${_cap(element)} confirmed.${r.next_step ? ` Confirm <strong>${r.next_step}</strong> next.` : ''}`);
     }
-  } catch { appendAI('Confirmation failed — please retry.'); }
+  } catch { appendAI('Confirmation failed ??? please retry.'); }
+}
+
+async function confirmPackage() {
+  appendAI('<span style="color:var(--teal)">Confirming <strong>Package</strong>...</span>');
+  try {
+    const ancillaries = Array.from(state.getSelectedAncillaries().entries()).map(([id, value]) => ({ id, ...value }));
+    const payload = {
+      flight: { selected: true },
+      hotel: { selected: true },
+      payment: { selected: true },
+      ancillaries,
+      ancillary_total_gbp: getAncillaryTotal(),
+    };
+    const r = await api.confirmElement(state.getSessionId(), 'package', payload);
+    if (r.status === 'confirmed') {
+      appendAI(`<strong style="color:var(--teal)">Package Confirmed!</strong><br>Reference: VGI-${state.getSessionId().toUpperCase()}`);
+      stopTimer();
+    } else {
+      appendAI(r.message || 'Package confirmation recorded.');
+    }
+  } catch { appendAI('Package confirmation failed ??? please retry.'); }
 }
 
 async function cancelBooking() {
@@ -507,9 +532,19 @@ function toggleAncillary(id, name, price) {
   document.getElementById(`anc-${id}`)?.classList.toggle('selected', selected);
   const check = document.getElementById(`ancc-${id}`);
   if (check) check.style.background = selected ? 'var(--teal)' : '';
-  const el = document.getElementById('selAncTotal');
-  if (el) el.textContent = `£${getAncillaryTotal().toFixed(0)}`;
+  const total = getAncillaryTotal();
+  document.querySelectorAll('[data-selected-anc-total]').forEach(el => {
+    el.textContent = `GBP ${total.toFixed(0)}`;
+  });
+  document.querySelectorAll('[data-selected-anc-row]').forEach(row => {
+    row.style.display = total > 0 ? '' : 'none';
+  });
+  document.querySelectorAll('[data-grand-total]').forEach(el => {
+    const base = parseFloat(el.dataset.baseTotal || '0') || 0;
+    el.textContent = `GBP ${(base + total).toFixed(0)}`;
+  });
 }
+
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -544,12 +579,13 @@ function _tierWelcome(tier, points) {
 
 // ── Window API for inline onclick handlers ────────────────────
 
-window.VoyageApp = { send, confirmEl, cancelBooking, modifyTrip, switchTab, toggleAncillary };
+window.VoyageApp = { send, confirmEl, confirmPackage, cancelBooking, modifyTrip, switchTab, toggleAncillary };
 
 // Direct global fallback so onclick works even during module init
 window.toggleAncillary = toggleAncillary;
 window.switchTab       = switchTab;
 window.confirmEl       = confirmEl;
+window.confirmPackage  = confirmPackage;
 window.cancelBooking   = cancelBooking;
 window.modifyTrip      = modifyTrip;
 

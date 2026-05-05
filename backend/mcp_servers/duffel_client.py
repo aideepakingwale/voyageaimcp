@@ -99,6 +99,7 @@ class DuffelClient:
         }
 
     def offer_request(self, origin: str, destination: str, date: str,
+                      return_date: str | None = None,
                       adults: int = 1, direct_only: bool = False,
                       cabin_class: str = "economy",
                       supplier_timeout_ms: int = 12000) -> list[dict]:
@@ -113,15 +114,23 @@ class DuffelClient:
             "supplier_timeout": supplier_timeout_ms,
         }
         url = f"{DUFFEL_BASE}/air/offer_requests?{urlencode(params)}"
+        slices = [
+            {
+                "origin": origin,
+                "destination": destination,
+                "departure_date": date,
+            }
+        ]
+        if return_date:
+            slices.append({
+                "origin": destination,
+                "destination": origin,
+                "departure_date": return_date,
+            })
+
         payload = {
             "data": {
-                "slices": [
-                    {
-                        "origin": origin,
-                        "destination": destination,
-                        "departure_date": date,
-                    }
-                ],
+                "slices": slices,
                 "passengers": [{"type": "adult"} for _ in range(max(1, adults))],
                 "cabin_class": cabin_class,
                 "max_connections": 0 if direct_only else 1,
@@ -145,6 +154,7 @@ class DuffelClient:
                         "origin": origin,
                         "destination": destination,
                         "date": date,
+                        "return_date": return_date,
                         "adults": adults,
                         "direct_only": direct_only,
                         "cabin_class": cabin_class,
@@ -160,6 +170,7 @@ class DuffelClient:
                     "origin": origin,
                     "destination": destination,
                     "date": date,
+                    "return_date": return_date,
                     "adults": adults,
                     "direct_only": direct_only,
                     "cabin_class": cabin_class,
@@ -177,6 +188,7 @@ class DuffelClient:
                     "origin": origin,
                     "destination": destination,
                     "date": date,
+                    "return_date": return_date,
                     "adults": adults,
                     "direct_only": direct_only,
                     "cabin_class": cabin_class,

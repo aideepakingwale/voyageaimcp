@@ -270,7 +270,7 @@ class MCPRelevanceScorer:
         return {
             "flights": {
                 "origin": origin, "destination": dest,
-                "date": check_in, "adults": guests,
+                "date": check_in, "return_date": check_out, "adults": guests,
                 "direct_only": "direct" in text.lower(),
             },
             "hotels": {

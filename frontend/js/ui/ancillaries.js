@@ -1,15 +1,10 @@
 /**
  * Ancillaries Panel UI Module
- * Builds the Smart Extras tab content — narratives + selectable cards.
- * Emits 'ancillaryToggled' custom event when a card is clicked.
+ * Builds the Smart Extras content with selectable cards.
  */
 import { catIcon, num } from '../utils/format.js';
+import { getSelectedAncillaries } from '../state.js';
 
-/**
- * Build the full ancillaries panel HTML.
- * @param {object} data — response.data from /api/ancillaries
- * @returns {string}    — HTML string
- */
 export function buildAncillariesPanel(data) {
   if (!data || !data.ancillaries?.length) {
     return '<div style="padding:16px;color:var(--muted)">No smart extras for this trip context.</div>';
@@ -17,20 +12,18 @@ export function buildAncillariesPanel(data) {
 
   return `
     <div style="padding-bottom:8px">
-      <div class="slbl" style="margin-bottom:8px">🧠 Why We Recommend These</div>
-      ${_narratives(data.narratives || [])}
+      <div class="slbl" style="margin-bottom:8px">Why We Recommend These</div>
+      ${buildNarratives(data.narratives || [])}
     </div>
-    <div class="slbl">🎁 Available Extras</div>
-    <div class="anc-grid">${_cards(data.ancillaries.slice(0, 8))}</div>
+    <div class="slbl">Available Extras</div>
+    <div class="anc-grid">${buildCards(data.ancillaries.slice(0, 8))}</div>
     <div style="margin-top:12px;font-size:12px;color:var(--muted)">
-      Tap any card to add it to your booking total.
+      Tap any card to add it to your booking total and package confirmation.
     </div>
   `;
 }
 
-// ── Private builders ──────────────────────────────────────────
-
-function _narratives(items) {
+function buildNarratives(items) {
   if (!items.length) return '';
   return items.map(n => `
     <div class="anc-narrative">
@@ -43,11 +36,13 @@ function _narratives(items) {
   `).join('');
 }
 
-function _cards(items) {
+function buildCards(items) {
+  const selected = getSelectedAncillaries();
   return items.map(a => {
     const reason = (a.reasons || [])[0] || a.description || '';
+    const isSelected = selected.has(a.id);
     return `
-      <div class="anc-card ${a.must_have ? 'must-have' : ''}"
+      <div class="anc-card ${a.must_have ? 'must-have' : ''} ${isSelected ? 'selected' : ''}"
            id="anc-${a.id}"
            data-id="${a.id}"
            data-price="${a.price_gbp}"
@@ -59,12 +54,10 @@ function _cards(items) {
         <div class="anc-reason">${reason}</div>
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div>
-            <span class="anc-price">£${num(a.price_gbp)}</span>
-            ${a.loyalty_discounted
-              ? '<span class="anc-discount">⭐ member price</span>'
-              : ''}
+            <span class="anc-price">GBP ${num(a.price_gbp)}</span>
+            ${a.loyalty_discounted ? '<span class="anc-discount">member price</span>' : ''}
           </div>
-          <div class="anc-check" id="ancc-${a.id}">✓</div>
+          <div class="anc-check" id="ancc-${a.id}" style="${isSelected ? 'background:var(--teal);' : ''}">OK</div>
         </div>
       </div>
     `;
