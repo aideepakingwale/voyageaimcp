@@ -308,12 +308,92 @@ class MCPRelevanceScorer:
             inner = data.get("data", {})
             lines.append(f"\n--- {name.upper()} MCP (confidence:{conf:.0%}) ---")
             if isinstance(inner, dict):
-                for k, v in list(inner.items())[:6]:
-                    if isinstance(v, list):
-                        lines.append(f"  {k}: {json.dumps(v[:3])}")
-                    elif v is not None:
-                        lines.append(f"  {k}: {json.dumps(v)}")
+                compact = self._compact_mcp_payload(name, inner)
+                for k, v in compact.items():
+                    if v is not None:
+                        lines.append(f"  {k}: {json.dumps(v, ensure_ascii=False)}")
         return "\n".join(lines)
+
+    def _compact_mcp_payload(self, name: str, inner: dict) -> dict:
+        if name == "flights":
+            flights = inner.get("flights", []) or []
+            return {
+                "summary": [self._compact_flight(f) for f in flights[:3]],
+                "origin": inner.get("origin"),
+                "destination": inner.get("destination"),
+                "date": inner.get("date"),
+                "return_date": inner.get("return_date"),
+                "source": inner.get("source"),
+                "count": len(flights),
+            }
+        if name == "hotels":
+            hotels = inner.get("hotels", []) or []
+            return {
+                "summary": [self._compact_hotel(h) for h in hotels[:3]],
+                "city": inner.get("city"),
+                "nights": inner.get("nights"),
+                "source": inner.get("source"),
+                "count": len(hotels),
+            }
+        if name == "weather":
+            keep = ("city", "country", "temp_c", "description", "forecast_48h", "advisory", "source")
+            return {k: inner.get(k) for k in keep if inner.get(k) is not None}
+        if name == "currency":
+            keep = ("base", "target", "rate", "amount", "converted", "tip", "updated", "source")
+            return {k: inner.get(k) for k in keep if inner.get(k) is not None}
+        if name == "visa":
+            keep = ("passport_country", "destination_country", "visa_required", "summary", "source")
+            return {k: inner.get(k) for k in keep if inner.get(k) is not None}
+        compact = {}
+        for k, v in list(inner.items())[:6]:
+            if isinstance(v, list):
+                compact[k] = v[:2]
+            else:
+                compact[k] = v
+        return compact
+
+    def _compact_flight(self, flight: dict) -> dict:
+        outbound = flight.get("outbound") or {}
+        inbound = flight.get("inbound") or {}
+        return {
+            "airline": flight.get("airline"),
+            "flight_number": flight.get("flight_number"),
+            "price_gbp": flight.get("price_gbp"),
+            "price_per_adult": flight.get("price_per_adult"),
+            "cabin": flight.get("cabin"),
+            "route_type": flight.get("route_type"),
+            "outbound": {
+                "from": outbound.get("origin") or flight.get("origin"),
+                "to": outbound.get("destination") or flight.get("destination"),
+                "departure": outbound.get("departure") or flight.get("departure"),
+                "arrival": outbound.get("arrival"),
+                "duration": outbound.get("duration"),
+                "stops": outbound.get("stops", flight.get("stops", 0)),
+                "layovers": [l.get("duration") for l in (outbound.get("layovers") or [])[:2]],
+            },
+            "inbound": {
+                "from": inbound.get("origin"),
+                "to": inbound.get("destination"),
+                "departure": inbound.get("departure"),
+                "arrival": inbound.get("arrival"),
+                "duration": inbound.get("duration"),
+                "stops": inbound.get("stops", 0),
+                "layovers": [l.get("duration") for l in (inbound.get("layovers") or [])[:2]],
+            } if inbound else None,
+            "source": flight.get("source"),
+        }
+
+    def _compact_hotel(self, hotel: dict) -> dict:
+        return {
+            "name": hotel.get("name"),
+            "stars": hotel.get("stars"),
+            "area": hotel.get("area") or hotel.get("location"),
+            "price_per_night": hotel.get("price_per_night"),
+            "total_price_gbp": hotel.get("total_price_gbp"),
+            "family_rooms": hotel.get("family_rooms"),
+            "amenities": (hotel.get("amenities") or [])[:4],
+            "source": hotel.get("source"),
+        }
 
     # ── helpers ──────────────────────────────────────────────
     def _extract_int(self, text, pattern, default, strip_commas=False):

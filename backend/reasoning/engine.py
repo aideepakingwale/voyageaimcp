@@ -198,6 +198,12 @@ class ReasoningEngine:
             mcp_data=self._mcp_scorer.summarise_mcp(mcp_data),
             fix_hint=build_fix_hint(fix_hint),
         )
+        self._log.debug("LLM prompt prepared", extra={
+            "session_id": session_id,
+            "attempt": attempt,
+            "prompt_chars": len(user_prompt),
+            "context_chars": len(context or ""),
+        })
 
         # LLM call via waterfall
         if not any(
@@ -219,7 +225,7 @@ class ReasoningEngine:
         if not llm_resp.success:
             raise RuntimeError(f"LLM waterfall exhausted: {llm_resp.error}")
 
-        llm_output = json.loads(llm_resp.text)
+        llm_output = self._parse_llm_json(llm_resp.text)
         self._store_entities(session_id, llm_output)
 
         # Confidence scoring
@@ -509,6 +515,22 @@ class ReasoningEngine:
         if "FACTUAL" in layer: return "Use only MCP-verified prices and IATA codes."
         if "BUSINESS"in layer: return "Respect budget cap and future date constraints."
         return "Review and correct the output carefully."
+
+    def _parse_llm_json(self, text: str) -> dict:
+        cleaned = text
+        try:
+            cleaned = self._waterfall._clean_json(text)
+        except Exception:
+            cleaned = text.strip()
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            snippet = cleaned[:400]
+            self._log.warning("LLM JSON parse failed", extra={
+                "error": str(exc),
+                "response_preview": snippet,
+            })
+            raise
 
     def _rejected(self, check, session_id: str) -> dict:
         return {
