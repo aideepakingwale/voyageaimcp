@@ -26,6 +26,8 @@ import { toggleAncillary as _toggleAnc,
 import { buildRecommendationPrompt,
          enrichManualPrompt }              from './utils/prompt_builder.js';
 
+const EMBED_MODE = window.self !== window.top || new URLSearchParams(window.location.search).get('embed') === '1';
+
 // ── Auth guard ────────────────────────────────────────────────
 
 function getAuth() {
@@ -41,12 +43,14 @@ function getAuth() {
 function redirectToLogin() {
   sessionStorage.removeItem('voyage_auth');
   clearLocalStorage();
-  window.location.href = '/login';
+  window.location.href = EMBED_MODE ? '/login?embed=1' : '/login';
 }
 
 // ── Boot ──────────────────────────────────────────────────────
 
 async function init() {
+  _applyDisplayMode();
+
   const auth = getAuth();
   if (!auth?.token || !auth?.session_id) {
     redirectToLogin();
@@ -235,6 +239,8 @@ function _renderInterestsSidebar(data) {
 // ── DOM events ────────────────────────────────────────────────
 
 function _bindEvents(auth) {
+  _bindShellEvents();
+
   // Send button
   $('#sendBtn')?.addEventListener('click', send);
 
@@ -268,6 +274,39 @@ function _bindEvents(auth) {
       const style = (auth.travel_style || '').toLowerCase().trim();
       const stylePart = style && style !== 'undefined' ? ` · ${style} traveller` : '';
       setText('#headerSub', `${auth.name}${stylePart} · ✈ ${display}`);
+    }
+  });
+}
+
+function _applyDisplayMode() {
+  if (EMBED_MODE) {
+    document.body.classList.add('embed-mode');
+  }
+}
+
+function _bindShellEvents() {
+  const menuBtn = $('#mobileMenuBtn');
+  const sidebar = document.querySelector('.sidebar');
+
+  menuBtn?.addEventListener('click', () => {
+    document.body.classList.toggle('sidebar-open');
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!document.body.classList.contains('sidebar-open')) return;
+    if (!sidebar || sidebar.contains(event.target) || menuBtn?.contains(event.target)) return;
+    document.body.classList.remove('sidebar-open');
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      document.body.classList.remove('sidebar-open');
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) {
+      document.body.classList.remove('sidebar-open');
     }
   });
 }

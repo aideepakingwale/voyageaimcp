@@ -183,3 +183,32 @@
   color:          var(--muted);
   line-height:    1.5;
 }
+
+@media (max-width: 900px) {
+  .anc-grid {
+    grid-template-columns: 1fr;
+  }
+  .pers-card {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .lp-header,
+  .earn-box,
+  .transfer-banner {
+    flex-wrap: wrap;
+  }
+  .lp-perk {
+    flex-wrap: wrap;
+  }
+  .lp-perk-val {
+    margin-left: 24px;
+  }
+  .pers-card {
+    gap: 10px;
+  }
+  .pers-match {
+    margin-left: 0;
+  }
+}
