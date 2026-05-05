@@ -13,52 +13,56 @@
   --text:#e5eef9;
   --muted:#8ea6c2;
   --teal:#00c9a7;
-  --red:#ef4444;
   --amber:#f59e0b;
+  --red:#ef4444;
   --font:Inter,Segoe UI,Arial,sans-serif;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font)}
-.layout{display:grid;grid-template-columns:250px 1fr;min-height:100vh}
+button,input,select,textarea{font:inherit}
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
 .sidebar{background:var(--panel);border-right:1px solid var(--border);padding:20px}
-.brand{font-size:20px;font-weight:700;margin-bottom:8px}
-.sub{font-size:12px;color:var(--muted);margin-bottom:24px}
-.token-box{display:grid;gap:8px;margin-bottom:20px}
-.token-box label,.field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-.token-row{display:grid;grid-template-columns:1fr auto;gap:8px}
-input,textarea,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel2);color:var(--text)}
-textarea{min-height:90px;resize:vertical}
+.brand{font-size:20px;font-weight:700}
+.sub{font-size:12px;color:var(--muted);margin:6px 0 22px}
+.field{display:grid;gap:6px}
+.field label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel2);color:var(--text)}
+textarea{min-height:84px;resize:vertical}
 button{border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
 .btn-primary{background:var(--teal);color:#041019}
 .btn-ghost{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
-.btn-danger{background:rgba(239,68,68,.14);color:#ffb4b4;border:1px solid rgba(239,68,68,.3)}
+.btn-danger{background:rgba(239,68,68,.14);color:#ffb9b9;border:1px solid rgba(239,68,68,.3)}
+.token-wrap{display:grid;gap:10px;margin-bottom:22px}
+.token-row{display:grid;grid-template-columns:1fr auto;gap:8px}
 .nav{display:grid;gap:8px}
 .nav button{text-align:left;background:transparent;color:var(--muted);border:1px solid transparent}
-.nav button.active{background:rgba(0,201,167,.1);color:var(--teal);border-color:rgba(0,201,167,.25)}
+.nav button.active{background:rgba(0,201,167,.1);color:var(--teal);border-color:rgba(0,201,167,.24)}
 .main{padding:24px 28px}
-.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}
 .title{font-size:24px;font-weight:700}
-.status{font-size:13px;color:var(--muted)}
-.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px}
+.status{font-size:13px;color:var(--muted);margin-top:6px}
 .hidden{display:none}
-.toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
-.toolbar-left,.toolbar-right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
 .stat{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px}
 .stat .k{font-size:12px;color:var(--muted)}
 .stat .v{font-size:24px;font-weight:700;margin-top:6px}
+.notice{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.22);color:#ffd38c;padding:12px 14px;border-radius:12px}
+.split{display:grid;grid-template-columns:minmax(320px,430px) 1fr;gap:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.toolbar-left,.toolbar-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.form-grid{display:grid;gap:12px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row-actions{display:flex;gap:8px;flex-wrap:wrap}
 table{width:100%;border-collapse:collapse}
 th,td{padding:12px 10px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;vertical-align:top}
 th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 tr:last-child td{border-bottom:0}
-.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:rgba(0,201,167,.12);color:var(--teal);font-size:12px}
-.row-actions{display:flex;gap:8px;flex-wrap:wrap}
-.split{display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:18px}
-.form-grid{display:grid;gap:12px}
-.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.notice{padding:12px 14px;border-radius:12px;background:rgba(245,158,11,.12);color:#ffd28a;border:1px solid rgba(245,158,11,.22);font-size:13px}
 .empty{padding:28px 10px;color:var(--muted);text-align:center}
+.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:rgba(0,201,167,.12);color:var(--teal);font-size:12px}
+.pill.off{background:rgba(239,68,68,.14);color:#ffb9b9}
 .small{font-size:12px;color:var(--muted)}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:#99f6e4}
 @media (max-width: 980px){
   .layout{grid-template-columns:1fr}
   .sidebar{border-right:0;border-bottom:1px solid var(--border)}
@@ -70,21 +74,24 @@ tr:last-child td{border-bottom:0}
 <div class="layout">
   <aside class="sidebar">
     <div class="brand">VoyageAI Admin</div>
-    <div class="sub">Reference and customer data</div>
-    <div class="token-box">
-      <label for="adminToken">Admin Token</label>
-      <div class="token-row">
-        <input id="adminToken" type="password" placeholder="voyageai-admin-2026">
-        <button class="btn-primary" id="saveTokenBtn" type="button">Save</button>
+    <div class="sub">Guardrails and customer master data</div>
+    <div class="token-wrap">
+      <div class="field">
+        <label for="adminToken">Admin Token</label>
+        <div class="token-row">
+          <input id="adminToken" type="password" placeholder="voyageai-admin-2026">
+          <button class="btn-primary" id="saveTokenBtn" type="button">Save</button>
+        </div>
       </div>
-      <div class="small">This panel uses the same token as the admin API.</div>
+      <div class="small">This token is sent as <code>X-Admin-Token</code>.</div>
     </div>
     <div class="nav">
-      <button class="active" type="button" data-view="overview">Overview</button>
-      <button type="button" data-view="customers">Customers</button>
-      <button type="button" data-view="airports">Airports</button>
-      <button type="button" data-view="currencies">Currencies</button>
-      <button type="button" data-view="rates">GBP Rates</button>
+      <button class="active" data-view="overview" type="button">Overview</button>
+      <button data-view="config" type="button">Guardrail Config</button>
+      <button data-view="skip" type="button">Skip Codes</button>
+      <button data-view="injection" type="button">Injection Patterns</button>
+      <button data-view="signals" type="button">Travel Signals</button>
+      <button data-view="customers" type="button">Customers</button>
     </div>
   </aside>
 
@@ -100,8 +107,162 @@ tr:last-child td{border-bottom:0}
       <div class="stats" id="statsGrid"></div>
       <div class="card">
         <div class="notice">
-          The old guardrail and prompt-tuning controls were removed from this admin surface because those behaviors are now largely dynamic and LLM-driven.
-          This panel now focuses on the data that still benefits from direct CRUD management: customers and reference tables.
+          Airport, currency, and GBP rate editing has been intentionally removed from this panel.
+          The active admin focus is guardrail management and customer data, which still benefit from live CRUD operations.
+        </div>
+      </div>
+    </section>
+
+    <section id="view-config" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Config Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" id="resetConfigBtn" type="button">New</button></div>
+          </div>
+          <div class="form-grid">
+            <input id="configOriginalKey" type="hidden">
+            <div class="field"><label for="configKey">Key</label><input id="configKey" placeholder="CONFIDENCE_THRESHOLD"></div>
+            <div class="field-row">
+              <div class="field"><label for="configValue">Value</label><input id="configValue" placeholder="0.72"></div>
+              <div class="field"><label for="configType">Type</label>
+                <select id="configType">
+                  <option>float</option>
+                  <option>int</option>
+                  <option>str</option>
+                  <option>bool</option>
+                </select>
+              </div>
+            </div>
+            <div class="field"><label for="configDescription">Description</label><textarea id="configDescription"></textarea></div>
+            <div class="row-actions">
+              <button class="btn-primary" id="saveConfigBtn" type="button">Save</button>
+              <button class="btn-danger hidden" id="deleteConfigBtn" type="button">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Config Rows</strong></div>
+            <div class="toolbar-right"><input id="configSearch" placeholder="Search config"></div>
+          </div>
+          <table>
+            <thead><tr><th>Key</th><th>Value</th><th>Type</th><th></th></tr></thead>
+            <tbody id="configTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-skip" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Skip Code Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" id="resetSkipBtn" type="button">New</button></div>
+          </div>
+          <div class="form-grid">
+            <input id="skipOriginalCode" type="hidden">
+            <input id="skipOriginalCategory" type="hidden">
+            <div class="field-row">
+              <div class="field"><label for="skipCode">Code</label><input id="skipCode" maxlength="8" placeholder="TAP"></div>
+              <div class="field"><label for="skipCategory">Category</label><input id="skipCategory" placeholder="AIRLINE"></div>
+            </div>
+            <div class="field"><label for="skipDescription">Description</label><textarea id="skipDescription"></textarea></div>
+            <div class="row-actions">
+              <button class="btn-primary" id="saveSkipBtn" type="button">Save</button>
+              <button class="btn-danger hidden" id="deleteSkipBtn" type="button">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Skip Codes</strong></div>
+            <div class="toolbar-right">
+              <input id="skipSearch" placeholder="Search skip code">
+              <select id="skipFilter"><option value="">All categories</option></select>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>Code</th><th>Category</th><th>Description</th><th></th></tr></thead>
+            <tbody id="skipTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-injection" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Injection Pattern Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" id="resetInjectionBtn" type="button">New</button></div>
+          </div>
+          <div class="form-grid">
+            <input id="injectionId" type="hidden">
+            <div class="field"><label for="injectionPattern">Regex Pattern</label><textarea id="injectionPattern"></textarea></div>
+            <div class="field"><label for="injectionDescription">Description</label><textarea id="injectionDescription"></textarea></div>
+            <div class="field">
+              <label for="injectionEnabled">Enabled</label>
+              <select id="injectionEnabled">
+                <option value="1">Enabled</option>
+                <option value="0">Disabled</option>
+              </select>
+            </div>
+            <div class="row-actions">
+              <button class="btn-primary" id="saveInjectionBtn" type="button">Save</button>
+              <button class="btn-danger hidden" id="deleteInjectionBtn" type="button">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Injection Patterns</strong></div>
+            <div class="toolbar-right"><input id="injectionSearch" placeholder="Search pattern"></div>
+          </div>
+          <table>
+            <thead><tr><th>Pattern</th><th>Status</th><th></th></tr></thead>
+            <tbody id="injectionTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-signals" class="hidden">
+      <div class="split">
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Travel Signal Editor</strong></div>
+            <div class="toolbar-right"><button class="btn-ghost" id="resetSignalBtn" type="button">New</button></div>
+          </div>
+          <div class="form-grid">
+            <input id="signalOriginalName" type="hidden">
+            <div class="field"><label for="signalName">Signal</label><input id="signalName" placeholder="flight"></div>
+            <div class="field"><label for="signalCategory">Category</label>
+              <select id="signalCategory">
+                <option>CORE</option>
+                <option>MODIFICATION</option>
+                <option>DESTINATION</option>
+              </select>
+            </div>
+            <div class="row-actions">
+              <button class="btn-primary" id="saveSignalBtn" type="button">Save</button>
+              <button class="btn-danger hidden" id="deleteSignalBtn" type="button">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="toolbar">
+            <div class="toolbar-left"><strong>Travel Signals</strong></div>
+            <div class="toolbar-right">
+              <input id="signalSearch" placeholder="Search signal">
+              <select id="signalFilter"><option value="">All categories</option></select>
+            </div>
+          </div>
+          <table>
+            <thead><tr><th>Signal</th><th>Category</th><th></th></tr></thead>
+            <tbody id="signalTable"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -111,16 +272,16 @@ tr:last-child td{border-bottom:0}
         <div class="card">
           <div class="toolbar">
             <div class="toolbar-left"><strong>Customer Editor</strong></div>
-            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetCustomerBtn">New</button></div>
+            <div class="toolbar-right"><button class="btn-ghost" id="resetCustomerBtn" type="button">New</button></div>
           </div>
           <div class="form-grid">
-            <input type="hidden" id="customerId">
+            <input id="customerId" type="hidden">
             <div class="field-row">
               <div class="field"><label for="customerName">Name</label><input id="customerName"></div>
               <div class="field"><label for="customerEmail">Email</label><input id="customerEmail" type="email"></div>
             </div>
             <div class="field-row">
-              <div class="field"><label for="customerMemberId">Member ID</label><input id="customerMemberId" placeholder="VGI-GOLD-1001"></div>
+              <div class="field"><label for="customerMemberId">Member ID</label><input id="customerMemberId"></div>
               <div class="field"><label for="customerTier">Tier</label>
                 <select id="customerTier">
                   <option>Blue</option>
@@ -151,13 +312,10 @@ tr:last-child td{border-bottom:0}
               <div class="field"><label for="customerAdults">Adults in Family</label><input id="customerAdults" type="number" min="1"></div>
               <div class="field"><label for="customerChildren">Children in Family</label><input id="customerChildren" type="number" min="0"></div>
             </div>
-            <div class="field">
-              <label for="customerInterests">Interests</label>
-              <textarea id="customerInterests" placeholder="beach, food, family"></textarea>
-            </div>
+            <div class="field"><label for="customerInterests">Interests</label><textarea id="customerInterests" placeholder="beach, food, family"></textarea></div>
             <div class="row-actions">
-              <button class="btn-primary" type="button" id="saveCustomerBtn">Save Customer</button>
-              <button class="btn-danger hidden" type="button" id="deleteCustomerBtn">Delete</button>
+              <button class="btn-primary" id="saveCustomerBtn" type="button">Save</button>
+              <button class="btn-danger hidden" id="deleteCustomerBtn" type="button">Delete</button>
             </div>
           </div>
         </div>
@@ -167,110 +325,8 @@ tr:last-child td{border-bottom:0}
             <div class="toolbar-right"><input id="customerSearch" placeholder="Search customer"></div>
           </div>
           <table>
-            <thead><tr><th>Name</th><th>Member</th><th>Tier</th><th>Style</th><th></th></tr></thead>
-            <tbody id="customersTable"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <section id="view-airports" class="hidden">
-      <div class="split">
-        <div class="card">
-          <div class="toolbar">
-            <div class="toolbar-left"><strong>Airport Editor</strong></div>
-            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetAirportBtn">New</button></div>
-          </div>
-          <div class="form-grid">
-            <div class="field-row">
-              <div class="field"><label for="airportIata">IATA</label><input id="airportIata" maxlength="3"></div>
-              <div class="field"><label for="airportCountry">Country Code</label><input id="airportCountry" maxlength="2"></div>
-            </div>
-            <div class="field"><label for="airportName">Airport Name</label><input id="airportName"></div>
-            <div class="field"><label for="airportCity">City</label><input id="airportCity"></div>
-            <div class="field-row">
-              <div class="field"><label for="airportLat">Latitude</label><input id="airportLat" type="number" step="0.0001"></div>
-              <div class="field"><label for="airportLon">Longitude</label><input id="airportLon" type="number" step="0.0001"></div>
-            </div>
-            <div class="row-actions">
-              <button class="btn-primary" type="button" id="saveAirportBtn">Save Airport</button>
-              <button class="btn-danger hidden" type="button" id="deleteAirportBtn">Delete</button>
-            </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="toolbar">
-            <div class="toolbar-left"><strong>Airports</strong></div>
-            <div class="toolbar-right"><input id="airportSearch" placeholder="Search airport"></div>
-          </div>
-          <table>
-            <thead><tr><th>IATA</th><th>Name</th><th>City</th><th>Country</th><th></th></tr></thead>
-            <tbody id="airportsTable"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <section id="view-currencies" class="hidden">
-      <div class="split">
-        <div class="card">
-          <div class="toolbar">
-            <div class="toolbar-left"><strong>Currency Editor</strong></div>
-            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetCurrencyBtn">New</button></div>
-          </div>
-          <div class="form-grid">
-            <div class="field-row">
-              <div class="field"><label for="currencyCode">Code</label><input id="currencyCode" maxlength="3"></div>
-              <div class="field"><label for="currencySymbol">Symbol</label><input id="currencySymbol"></div>
-            </div>
-            <div class="field-row">
-              <div class="field"><label for="currencyName">Name</label><input id="currencyName"></div>
-              <div class="field"><label for="currencyDecimals">Decimals</label><input id="currencyDecimals" type="number" min="0" max="6" value="2"></div>
-            </div>
-            <div class="row-actions">
-              <button class="btn-primary" type="button" id="saveCurrencyBtn">Save Currency</button>
-              <button class="btn-danger hidden" type="button" id="deleteCurrencyBtn">Delete</button>
-            </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="toolbar">
-            <div class="toolbar-left"><strong>Currencies</strong></div>
-            <div class="toolbar-right"><input id="currencySearch" placeholder="Search currency"></div>
-          </div>
-          <table>
-            <thead><tr><th>Code</th><th>Name</th><th>Symbol</th><th>Decimals</th><th></th></tr></thead>
-            <tbody id="currenciesTable"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <section id="view-rates" class="hidden">
-      <div class="split">
-        <div class="card">
-          <div class="toolbar">
-            <div class="toolbar-left"><strong>GBP Rate Editor</strong></div>
-            <div class="toolbar-right"><button class="btn-ghost" type="button" id="resetRateBtn">New</button></div>
-          </div>
-          <div class="form-grid">
-            <div class="field-row">
-              <div class="field"><label for="rateCurrency">Currency</label><input id="rateCurrency" maxlength="3"></div>
-              <div class="field"><label for="rateValue">1 GBP =</label><input id="rateValue" type="number" step="0.0001"></div>
-            </div>
-            <div class="row-actions">
-              <button class="btn-primary" type="button" id="saveRateBtn">Save Rate</button>
-              <button class="btn-danger hidden" type="button" id="deleteRateBtn">Delete</button>
-            </div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="toolbar">
-            <div class="toolbar-left"><strong>GBP Rates</strong></div>
-          </div>
-          <table>
-            <thead><tr><th>Currency</th><th>Rate</th><th>Updated</th><th></th></tr></thead>
-            <tbody id="ratesTable"></tbody>
+            <thead><tr><th>Name</th><th>Member</th><th>Tier</th><th></th></tr></thead>
+            <tbody id="customerTable"></tbody>
           </table>
         </div>
       </div>
@@ -285,19 +341,17 @@ const TOKEN_KEY = "voyage_admin_token";
 const state = {
   view: "overview",
   stats: {},
+  config: [],
+  skip: [],
+  skipCategories: [],
+  injection: [],
+  signals: [],
+  signalCategories: [],
   customers: [],
-  airports: [],
-  currencies: [],
-  rates: [],
-  selectedCustomer: null,
-  selectedAirport: null,
-  selectedCurrency: null,
-  selectedRate: null,
 };
 
 function qs(id) { return document.getElementById(id); }
 function token() { return qs("adminToken").value.trim(); }
-function setStatus(text) { qs("pageStatus").textContent = text; }
 function escaped(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -305,39 +359,26 @@ function escaped(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
-function joinInterests(value) {
-  if (Array.isArray(value)) return value.join(", ");
-  return value || "";
-}
+function setStatus(text) { qs("pageStatus").textContent = text; }
 function parseInterests(value) {
-  return String(value || "")
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
+  return String(value || "").split(",").map(s => s.trim()).filter(Boolean);
 }
-function fmtDate(value) {
-  if (!value) return "-";
-  const dt = typeof value === "number" ? new Date(value * 1000) : new Date(value);
-  if (Number.isNaN(dt.getTime())) return String(value);
-  return dt.toLocaleDateString();
-}
-
-function saveToken() {
-  localStorage.setItem(TOKEN_KEY, token());
+function joinInterests(value) {
+  return Array.isArray(value) ? value.join(", ") : (value || "");
 }
 
 async function api(path, options = {}) {
   const adminToken = token();
-  if (!adminToken) {
-    throw new Error("Enter the admin token first.");
-  }
+  if (!adminToken) throw new Error("Enter the admin token first.");
   const headers = { "Content-Type": "application/json", "X-Admin-Token": adminToken, ...(options.headers || {}) };
   const response = await fetch(API + path, { ...options, headers });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || ("Request failed with " + response.status));
-  }
+  if (!response.ok) throw new Error(data.error || ("Request failed with " + response.status));
   return data;
+}
+
+function saveToken() {
+  localStorage.setItem(TOKEN_KEY, token());
 }
 
 function switchView(view) {
@@ -347,47 +388,328 @@ function switchView(view) {
   qs("view-" + view).classList.remove("hidden");
   qs("pageTitle").textContent = {
     overview: "Overview",
+    config: "Guardrail Config",
+    skip: "Skip Codes",
+    injection: "Injection Patterns",
+    signals: "Travel Signals",
     customers: "Customers",
-    airports: "Airports",
-    currencies: "Currencies",
-    rates: "GBP Rates",
   }[view] || view;
 }
 
 function renderStats() {
   const s = state.stats || {};
   qs("statsGrid").innerHTML = [
+    ["Config", s.guardrail_config || 0],
+    ["Skip Codes", s.guardrail_skip_codes || 0],
+    ["Injection Patterns", s.guardrail_injection_patterns || 0],
+    ["Travel Signals", s.guardrail_travel_signals || 0],
     ["Customers", s.customers || 0],
-    ["Airports", s.ref_airports || 0],
-    ["Currencies", s.ref_currencies || 0],
-    ["GBP Rates", s.ref_gbp_rates || 0],
-  ].map(([label, value]) => `<div class="stat"><div class="k">${escaped(label)}</div><div class="v">${escaped(value)}</div></div>`).join("");
+  ].map(([k, v]) => `<div class="stat"><div class="k">${escaped(k)}</div><div class="v">${escaped(v)}</div></div>`).join("");
 }
 
 async function loadStats() {
-  const data = await api("/admin/stats");
-  state.stats = data;
+  state.stats = await api("/admin/stats");
   renderStats();
+}
+
+function renderConfig() {
+  const search = qs("configSearch").value.trim().toLowerCase();
+  const rows = state.config.filter(row =>
+    !search || [row.key, row.value, row.dtype, row.description].some(v => String(v || "").toLowerCase().includes(search))
+  );
+  qs("configTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td><code>${escaped(row.key)}</code></td>
+      <td>${escaped(row.value)}</td>
+      <td>${escaped(row.dtype)}</td>
+      <td><button class="btn-ghost" type="button" onclick="editConfig('${escaped(row.key)}')">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="4" class="empty">No config rows found</td></tr>`;
+}
+
+async function loadConfig() {
+  state.config = await api("/admin/guardrail/config");
+  renderConfig();
+}
+
+function resetConfigForm() {
+  qs("configOriginalKey").value = "";
+  qs("configKey").value = "";
+  qs("configValue").value = "";
+  qs("configType").value = "float";
+  qs("configDescription").value = "";
+  qs("deleteConfigBtn").classList.add("hidden");
+}
+
+window.editConfig = function editConfig(key) {
+  const row = state.config.find(item => item.key === key);
+  if (!row) return;
+  qs("configOriginalKey").value = row.key || "";
+  qs("configKey").value = row.key || "";
+  qs("configValue").value = row.value || "";
+  qs("configType").value = row.dtype || "float";
+  qs("configDescription").value = row.description || "";
+  qs("deleteConfigBtn").classList.remove("hidden");
+};
+
+async function saveConfig() {
+  const originalKey = qs("configOriginalKey").value.trim();
+  const payload = {
+    key: qs("configKey").value.trim(),
+    value: qs("configValue").value.trim(),
+    dtype: qs("configType").value,
+    description: qs("configDescription").value.trim(),
+  };
+  if (originalKey && originalKey !== payload.key) {
+    await api("/admin/guardrail/config/" + encodeURIComponent(originalKey), { method: "DELETE" });
+  }
+  await api("/admin/guardrail/config", { method: "POST", body: JSON.stringify(payload) });
+  setStatus("Guardrail config saved.");
+  await loadConfig();
+  await loadStats();
+  resetConfigForm();
+}
+
+async function deleteConfig() {
+  const key = qs("configOriginalKey").value.trim() || qs("configKey").value.trim();
+  if (!key || !confirm("Delete this config key?")) return;
+  await api("/admin/guardrail/config/" + encodeURIComponent(key), { method: "DELETE" });
+  setStatus("Guardrail config deleted.");
+  await loadConfig();
+  await loadStats();
+  resetConfigForm();
+}
+
+function renderSkip() {
+  const search = qs("skipSearch").value.trim().toLowerCase();
+  const filter = qs("skipFilter").value;
+  const rows = state.skip.filter(row => {
+    const matchesFilter = !filter || row.category === filter;
+    const matchesSearch = !search || [row.code, row.category, row.description].some(v => String(v || "").toLowerCase().includes(search));
+    return matchesFilter && matchesSearch;
+  });
+  qs("skipTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td><code>${escaped(row.code)}</code></td>
+      <td>${escaped(row.category)}</td>
+      <td>${escaped(row.description || "")}</td>
+      <td><button class="btn-ghost" type="button" onclick="editSkip('${escaped(row.code)}','${escaped(row.category)}')">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="4" class="empty">No skip codes found</td></tr>`;
+}
+
+async function loadSkip() {
+  const data = await api("/admin/guardrail/skip-codes");
+  state.skip = data.rows || [];
+  state.skipCategories = data.categories || [];
+  qs("skipFilter").innerHTML = `<option value="">All categories</option>` + state.skipCategories.map(cat => `<option value="${escaped(cat)}">${escaped(cat)}</option>`).join("");
+  renderSkip();
+}
+
+function resetSkipForm() {
+  qs("skipOriginalCode").value = "";
+  qs("skipOriginalCategory").value = "";
+  qs("skipCode").value = "";
+  qs("skipCategory").value = "";
+  qs("skipDescription").value = "";
+  qs("deleteSkipBtn").classList.add("hidden");
+}
+
+window.editSkip = function editSkip(code, category) {
+  const row = state.skip.find(item => item.code === code && item.category === category);
+  if (!row) return;
+  qs("skipOriginalCode").value = row.code || "";
+  qs("skipOriginalCategory").value = row.category || "";
+  qs("skipCode").value = row.code || "";
+  qs("skipCategory").value = row.category || "";
+  qs("skipDescription").value = row.description || "";
+  qs("deleteSkipBtn").classList.remove("hidden");
+};
+
+async function saveSkip() {
+  const originalCode = qs("skipOriginalCode").value.trim();
+  const originalCategory = qs("skipOriginalCategory").value.trim();
+  const payload = {
+    code: qs("skipCode").value.trim().toUpperCase(),
+    category: qs("skipCategory").value.trim().toUpperCase(),
+    description: qs("skipDescription").value.trim(),
+  };
+  if (originalCode && (originalCode !== payload.code || originalCategory !== payload.category)) {
+    await api("/admin/guardrail/skip-codes/" + encodeURIComponent(originalCode) + "?category=" + encodeURIComponent(originalCategory), { method: "DELETE" });
+  }
+  await api("/admin/guardrail/skip-codes", { method: "POST", body: JSON.stringify(payload) });
+  setStatus("Skip code saved.");
+  await loadSkip();
+  await loadStats();
+  resetSkipForm();
+}
+
+async function deleteSkip() {
+  const code = qs("skipOriginalCode").value.trim();
+  const category = qs("skipOriginalCategory").value.trim();
+  if (!code || !confirm("Delete this skip code?")) return;
+  await api("/admin/guardrail/skip-codes/" + encodeURIComponent(code) + "?category=" + encodeURIComponent(category), { method: "DELETE" });
+  setStatus("Skip code deleted.");
+  await loadSkip();
+  await loadStats();
+  resetSkipForm();
+}
+
+function renderInjection() {
+  const search = qs("injectionSearch").value.trim().toLowerCase();
+  const rows = state.injection.filter(row =>
+    !search || [row.pattern, row.description].some(v => String(v || "").toLowerCase().includes(search))
+  );
+  qs("injectionTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td><code>${escaped(row.pattern)}</code><div class="small">${escaped(row.description || "")}</div></td>
+      <td><span class="pill ${row.enabled ? "" : "off"}">${row.enabled ? "Enabled" : "Disabled"}</span></td>
+      <td><button class="btn-ghost" type="button" onclick="editInjection(${row.id})">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="3" class="empty">No injection patterns found</td></tr>`;
+}
+
+async function loadInjection() {
+  state.injection = await api("/admin/guardrail/injection-patterns");
+  renderInjection();
+}
+
+function resetInjectionForm() {
+  qs("injectionId").value = "";
+  qs("injectionPattern").value = "";
+  qs("injectionDescription").value = "";
+  qs("injectionEnabled").value = "1";
+  qs("deleteInjectionBtn").classList.add("hidden");
+}
+
+window.editInjection = function editInjection(id) {
+  const row = state.injection.find(item => Number(item.id) === Number(id));
+  if (!row) return;
+  qs("injectionId").value = row.id;
+  qs("injectionPattern").value = row.pattern || "";
+  qs("injectionDescription").value = row.description || "";
+  qs("injectionEnabled").value = row.enabled ? "1" : "0";
+  qs("deleteInjectionBtn").classList.remove("hidden");
+};
+
+async function saveInjection() {
+  const id = qs("injectionId").value.trim();
+  const payload = {
+    pattern: qs("injectionPattern").value.trim(),
+    description: qs("injectionDescription").value.trim(),
+    enabled: Number(qs("injectionEnabled").value),
+  };
+  if (id) {
+    const current = state.injection.find(item => String(item.id) === id);
+    if (current && current.pattern !== payload.pattern) {
+      await api("/admin/guardrail/injection-patterns/" + encodeURIComponent(id), { method: "DELETE" });
+      await api("/admin/guardrail/injection-patterns", { method: "POST", body: JSON.stringify(payload) });
+    } else {
+      if (current && current.description !== payload.description) {
+        await api("/admin/guardrail/injection-patterns/" + encodeURIComponent(id), { method: "DELETE" });
+        await api("/admin/guardrail/injection-patterns", { method: "POST", body: JSON.stringify(payload) });
+      }
+      await api("/admin/guardrail/injection-patterns/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify({ enabled: payload.enabled }) });
+    }
+  } else {
+    await api("/admin/guardrail/injection-patterns", { method: "POST", body: JSON.stringify(payload) });
+  }
+  setStatus("Injection pattern saved.");
+  await loadInjection();
+  await loadStats();
+  resetInjectionForm();
+}
+
+async function deleteInjection() {
+  const id = qs("injectionId").value.trim();
+  if (!id || !confirm("Delete this injection pattern?")) return;
+  await api("/admin/guardrail/injection-patterns/" + encodeURIComponent(id), { method: "DELETE" });
+  setStatus("Injection pattern deleted.");
+  await loadInjection();
+  await loadStats();
+  resetInjectionForm();
+}
+
+function renderSignals() {
+  const search = qs("signalSearch").value.trim().toLowerCase();
+  const filter = qs("signalFilter").value;
+  const rows = state.signals.filter(row => {
+    const matchesFilter = !filter || row.category === filter;
+    const matchesSearch = !search || String(row.signal || "").toLowerCase().includes(search);
+    return matchesFilter && matchesSearch;
+  });
+  qs("signalTable").innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td><code>${escaped(row.signal)}</code></td>
+      <td>${escaped(row.category)}</td>
+      <td><button class="btn-ghost" type="button" onclick="editSignal('${escaped(row.signal)}')">Edit</button></td>
+    </tr>
+  `).join("") : `<tr><td colspan="3" class="empty">No travel signals found</td></tr>`;
+}
+
+async function loadSignals() {
+  const data = await api("/admin/guardrail/travel-signals");
+  state.signals = data.rows || [];
+  state.signalCategories = data.categories || [];
+  qs("signalFilter").innerHTML = `<option value="">All categories</option>` + state.signalCategories.map(cat => `<option value="${escaped(cat)}">${escaped(cat)}</option>`).join("");
+  renderSignals();
+}
+
+function resetSignalForm() {
+  qs("signalOriginalName").value = "";
+  qs("signalName").value = "";
+  qs("signalCategory").value = "CORE";
+  qs("deleteSignalBtn").classList.add("hidden");
+}
+
+window.editSignal = function editSignal(signal) {
+  const row = state.signals.find(item => item.signal === signal);
+  if (!row) return;
+  qs("signalOriginalName").value = row.signal || "";
+  qs("signalName").value = row.signal || "";
+  qs("signalCategory").value = row.category || "CORE";
+  qs("deleteSignalBtn").classList.remove("hidden");
+};
+
+async function saveSignal() {
+  const originalSignal = qs("signalOriginalName").value.trim();
+  const payload = {
+    signal: qs("signalName").value.trim().toLowerCase(),
+    category: qs("signalCategory").value,
+  };
+  if (originalSignal && originalSignal !== payload.signal) {
+    await api("/admin/guardrail/travel-signals/" + encodeURIComponent(originalSignal), { method: "DELETE" });
+  }
+  await api("/admin/guardrail/travel-signals", { method: "POST", body: JSON.stringify(payload) });
+  setStatus("Travel signal saved.");
+  await loadSignals();
+  await loadStats();
+  resetSignalForm();
+}
+
+async function deleteSignal() {
+  const signal = qs("signalOriginalName").value.trim() || qs("signalName").value.trim();
+  if (!signal || !confirm("Delete this signal?")) return;
+  await api("/admin/guardrail/travel-signals/" + encodeURIComponent(signal), { method: "DELETE" });
+  setStatus("Travel signal deleted.");
+  await loadSignals();
+  await loadStats();
+  resetSignalForm();
 }
 
 function renderCustomers() {
   const search = qs("customerSearch").value.trim().toLowerCase();
-  const rows = state.customers.filter(row => {
-    if (!search) return true;
-    return [row.name, row.email, row.member_id, row.id].some(v => String(v || "").toLowerCase().includes(search));
-  });
-  qs("customersTable").innerHTML = rows.length ? rows.map(row => `
+  const rows = state.customers.filter(row =>
+    !search || [row.name, row.email, row.member_id, row.id].some(v => String(v || "").toLowerCase().includes(search))
+  );
+  qs("customerTable").innerHTML = rows.length ? rows.map(row => `
     <tr>
-      <td>
-        <strong>${escaped(row.name)}</strong><br>
-        <span class="small">${escaped(row.email || "")}</span>
-      </td>
+      <td><strong>${escaped(row.name)}</strong><div class="small">${escaped(row.email || "")}</div></td>
       <td>${escaped(row.member_id || row.id)}</td>
-      <td><span class="pill">${escaped(row.loyalty_tier || "Blue")}</span></td>
-      <td>${escaped(row.travel_style || "-")}</td>
+      <td>${escaped(row.loyalty_tier || "Blue")}</td>
       <td><button class="btn-ghost" type="button" onclick="editCustomer('${escaped(row.id)}')">Edit</button></td>
     </tr>
-  `).join("") : `<tr><td colspan="5" class="empty">No customers found</td></tr>`;
+  `).join("") : `<tr><td colspan="4" class="empty">No customers found</td></tr>`;
 }
 
 async function loadCustomers() {
@@ -397,7 +719,6 @@ async function loadCustomers() {
 }
 
 function resetCustomerForm() {
-  state.selectedCustomer = null;
   qs("customerId").value = "";
   qs("customerName").value = "";
   qs("customerEmail").value = "";
@@ -416,7 +737,6 @@ function resetCustomerForm() {
 window.editCustomer = function editCustomer(id) {
   const row = state.customers.find(item => item.id === id);
   if (!row) return;
-  state.selectedCustomer = row;
   qs("customerId").value = row.id || "";
   qs("customerName").value = row.name || "";
   qs("customerEmail").value = row.email || "";
@@ -433,6 +753,7 @@ window.editCustomer = function editCustomer(id) {
 };
 
 async function saveCustomer() {
+  const id = qs("customerId").value.trim();
   const payload = {
     name: qs("customerName").value.trim(),
     email: qs("customerEmail").value.trim(),
@@ -446,7 +767,6 @@ async function saveCustomer() {
     children_in_family: Number(qs("customerChildren").value || 0),
     interests: parseInterests(qs("customerInterests").value),
   };
-  const id = qs("customerId").value.trim();
   if (id) {
     await api("/admin/customers/" + encodeURIComponent(id), { method: "PATCH", body: JSON.stringify(payload) });
     setStatus("Customer updated.");
@@ -469,242 +789,52 @@ async function deleteCustomer() {
   resetCustomerForm();
 }
 
-function renderAirports() {
-  const search = qs("airportSearch").value.trim().toLowerCase();
-  const rows = state.airports.filter(row => {
-    if (!search) return true;
-    return [row.iata, row.name, row.city, row.country_code].some(v => String(v || "").toLowerCase().includes(search));
-  });
-  qs("airportsTable").innerHTML = rows.length ? rows.map(row => `
-    <tr>
-      <td>${escaped(row.iata)}</td>
-      <td>${escaped(row.name)}</td>
-      <td>${escaped(row.city)}</td>
-      <td>${escaped(row.country_code)}</td>
-      <td><button class="btn-ghost" type="button" onclick="editAirport('${escaped(row.iata)}')">Edit</button></td>
-    </tr>
-  `).join("") : `<tr><td colspan="5" class="empty">No airports found</td></tr>`;
-}
-
-async function loadAirports() {
-  const search = qs("airportSearch").value.trim();
-  const data = await api("/admin/ref/airports?q=" + encodeURIComponent(search) + "&limit=150");
-  state.airports = data.rows || [];
-  renderAirports();
-}
-
-function resetAirportForm() {
-  state.selectedAirport = null;
-  qs("airportIata").value = "";
-  qs("airportCountry").value = "";
-  qs("airportName").value = "";
-  qs("airportCity").value = "";
-  qs("airportLat").value = "";
-  qs("airportLon").value = "";
-  qs("deleteAirportBtn").classList.add("hidden");
-}
-
-window.editAirport = function editAirport(iata) {
-  const row = state.airports.find(item => item.iata === iata);
-  if (!row) return;
-  state.selectedAirport = row;
-  qs("airportIata").value = row.iata || "";
-  qs("airportCountry").value = row.country_code || "";
-  qs("airportName").value = row.name || "";
-  qs("airportCity").value = row.city || "";
-  qs("airportLat").value = row.lat ?? "";
-  qs("airportLon").value = row.lon ?? "";
-  qs("deleteAirportBtn").classList.remove("hidden");
-};
-
-async function saveAirport() {
-  const payload = {
-    iata: qs("airportIata").value.trim().toUpperCase(),
-    country_code: qs("airportCountry").value.trim().toUpperCase(),
-    name: qs("airportName").value.trim(),
-    city: qs("airportCity").value.trim(),
-    lat: qs("airportLat").value ? Number(qs("airportLat").value) : null,
-    lon: qs("airportLon").value ? Number(qs("airportLon").value) : null,
-  };
-  await api("/admin/ref/airports", { method: "POST", body: JSON.stringify(payload) });
-  setStatus("Airport saved.");
-  await loadAirports();
-  await loadStats();
-  resetAirportForm();
-}
-
-async function deleteAirport() {
-  const iata = qs("airportIata").value.trim().toUpperCase();
-  if (!iata || !confirm("Delete this airport?")) return;
-  await api("/admin/ref/airports/" + encodeURIComponent(iata), { method: "DELETE" });
-  setStatus("Airport deleted.");
-  await loadAirports();
-  await loadStats();
-  resetAirportForm();
-}
-
-function renderCurrencies() {
-  const search = qs("currencySearch").value.trim().toLowerCase();
-  const rows = state.currencies.filter(row => {
-    if (!search) return true;
-    return [row.code, row.name, row.symbol].some(v => String(v || "").toLowerCase().includes(search));
-  });
-  qs("currenciesTable").innerHTML = rows.length ? rows.map(row => `
-    <tr>
-      <td>${escaped(row.code)}</td>
-      <td>${escaped(row.name)}</td>
-      <td>${escaped(row.symbol)}</td>
-      <td>${escaped(row.decimals ?? 2)}</td>
-      <td><button class="btn-ghost" type="button" onclick="editCurrency('${escaped(row.code)}')">Edit</button></td>
-    </tr>
-  `).join("") : `<tr><td colspan="5" class="empty">No currencies found</td></tr>`;
-}
-
-async function loadCurrencies() {
-  const search = qs("currencySearch").value.trim();
-  const data = await api("/admin/ref/currencies?q=" + encodeURIComponent(search));
-  state.currencies = data.rows || [];
-  renderCurrencies();
-}
-
-function resetCurrencyForm() {
-  state.selectedCurrency = null;
-  qs("currencyCode").value = "";
-  qs("currencyName").value = "";
-  qs("currencySymbol").value = "";
-  qs("currencyDecimals").value = "2";
-  qs("deleteCurrencyBtn").classList.add("hidden");
-}
-
-window.editCurrency = function editCurrency(code) {
-  const row = state.currencies.find(item => item.code === code);
-  if (!row) return;
-  state.selectedCurrency = row;
-  qs("currencyCode").value = row.code || "";
-  qs("currencyName").value = row.name || "";
-  qs("currencySymbol").value = row.symbol || "";
-  qs("currencyDecimals").value = row.decimals ?? 2;
-  qs("deleteCurrencyBtn").classList.remove("hidden");
-};
-
-async function saveCurrency() {
-  const payload = {
-    code: qs("currencyCode").value.trim().toUpperCase(),
-    name: qs("currencyName").value.trim(),
-    symbol: qs("currencySymbol").value.trim(),
-    decimals: Number(qs("currencyDecimals").value || 2),
-  };
-  await api("/admin/ref/currencies", { method: "POST", body: JSON.stringify(payload) });
-  setStatus("Currency saved.");
-  await loadCurrencies();
-  await loadStats();
-  resetCurrencyForm();
-}
-
-async function deleteCurrency() {
-  const code = qs("currencyCode").value.trim().toUpperCase();
-  if (!code || !confirm("Delete this currency?")) return;
-  await api("/admin/ref/currencies/" + encodeURIComponent(code), { method: "DELETE" });
-  setStatus("Currency deleted.");
-  await loadCurrencies();
-  await loadStats();
-  resetCurrencyForm();
-}
-
-function renderRates() {
-  const rows = state.rates;
-  qs("ratesTable").innerHTML = rows.length ? rows.map(row => `
-    <tr>
-      <td>${escaped(row.currency)}</td>
-      <td>${escaped(row.rate)}</td>
-      <td>${escaped(fmtDate(row.updated_at))}</td>
-      <td><button class="btn-ghost" type="button" onclick="editRate('${escaped(row.currency)}')">Edit</button></td>
-    </tr>
-  `).join("") : `<tr><td colspan="4" class="empty">No rates found</td></tr>`;
-}
-
-async function loadRates() {
-  const data = await api("/admin/ref/gbp-rates");
-  state.rates = data.rows || [];
-  renderRates();
-}
-
-function resetRateForm() {
-  state.selectedRate = null;
-  qs("rateCurrency").value = "";
-  qs("rateValue").value = "";
-  qs("deleteRateBtn").classList.add("hidden");
-}
-
-window.editRate = function editRate(currency) {
-  const row = state.rates.find(item => item.currency === currency);
-  if (!row) return;
-  state.selectedRate = row;
-  qs("rateCurrency").value = row.currency || "";
-  qs("rateValue").value = row.rate ?? "";
-  qs("deleteRateBtn").classList.remove("hidden");
-};
-
-async function saveRate() {
-  const payload = {
-    currency: qs("rateCurrency").value.trim().toUpperCase(),
-    rate: Number(qs("rateValue").value || 0),
-  };
-  await api("/admin/ref/gbp-rates", { method: "POST", body: JSON.stringify(payload) });
-  setStatus("GBP rate saved.");
-  await loadRates();
-  await loadStats();
-  resetRateForm();
-}
-
-async function deleteRate() {
-  const currency = qs("rateCurrency").value.trim().toUpperCase();
-  if (!currency || !confirm("Delete this rate?")) return;
-  await api("/admin/ref/gbp-rates/" + encodeURIComponent(currency), { method: "DELETE" });
-  setStatus("GBP rate deleted.");
-  await loadRates();
-  await loadStats();
-  resetRateForm();
-}
-
 async function refreshAll() {
   try {
     setStatus("Loading admin data...");
-    await Promise.all([loadStats(), loadCustomers(), loadAirports(), loadCurrencies(), loadRates()]);
+    await Promise.all([loadStats(), loadConfig(), loadSkip(), loadInjection(), loadSignals(), loadCustomers()]);
     setStatus("Admin data loaded.");
   } catch (error) {
     setStatus(error.message);
   }
 }
 
-document.querySelectorAll(".nav button").forEach(btn => {
-  btn.addEventListener("click", () => switchView(btn.dataset.view));
-});
-qs("saveTokenBtn").addEventListener("click", async () => {
-  saveToken();
-  await refreshAll();
-});
+document.querySelectorAll(".nav button").forEach(btn => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+qs("saveTokenBtn").addEventListener("click", async () => { saveToken(); await refreshAll(); });
+qs("configSearch").addEventListener("input", renderConfig);
+qs("skipSearch").addEventListener("input", renderSkip);
+qs("skipFilter").addEventListener("change", renderSkip);
+qs("injectionSearch").addEventListener("input", renderInjection);
+qs("signalSearch").addEventListener("input", renderSignals);
+qs("signalFilter").addEventListener("change", renderSignals);
 qs("customerSearch").addEventListener("input", renderCustomers);
-qs("airportSearch").addEventListener("input", loadAirports);
-qs("currencySearch").addEventListener("input", loadCurrencies);
+
+qs("resetConfigBtn").addEventListener("click", resetConfigForm);
+qs("saveConfigBtn").addEventListener("click", saveConfig);
+qs("deleteConfigBtn").addEventListener("click", deleteConfig);
+
+qs("resetSkipBtn").addEventListener("click", resetSkipForm);
+qs("saveSkipBtn").addEventListener("click", saveSkip);
+qs("deleteSkipBtn").addEventListener("click", deleteSkip);
+
+qs("resetInjectionBtn").addEventListener("click", resetInjectionForm);
+qs("saveInjectionBtn").addEventListener("click", saveInjection);
+qs("deleteInjectionBtn").addEventListener("click", deleteInjection);
+
+qs("resetSignalBtn").addEventListener("click", resetSignalForm);
+qs("saveSignalBtn").addEventListener("click", saveSignal);
+qs("deleteSignalBtn").addEventListener("click", deleteSignal);
+
 qs("resetCustomerBtn").addEventListener("click", resetCustomerForm);
 qs("saveCustomerBtn").addEventListener("click", saveCustomer);
 qs("deleteCustomerBtn").addEventListener("click", deleteCustomer);
-qs("resetAirportBtn").addEventListener("click", resetAirportForm);
-qs("saveAirportBtn").addEventListener("click", saveAirport);
-qs("deleteAirportBtn").addEventListener("click", deleteAirport);
-qs("resetCurrencyBtn").addEventListener("click", resetCurrencyForm);
-qs("saveCurrencyBtn").addEventListener("click", saveCurrency);
-qs("deleteCurrencyBtn").addEventListener("click", deleteCurrency);
-qs("resetRateBtn").addEventListener("click", resetRateForm);
-qs("saveRateBtn").addEventListener("click", saveRate);
-qs("deleteRateBtn").addEventListener("click", deleteRate);
 
 qs("adminToken").value = localStorage.getItem(TOKEN_KEY) || "voyageai-admin-2026";
+resetConfigForm();
+resetSkipForm();
+resetInjectionForm();
+resetSignalForm();
 resetCustomerForm();
-resetAirportForm();
-resetCurrencyForm();
-resetRateForm();
 renderStats();
 refreshAll();
 </script>
